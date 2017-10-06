@@ -43,7 +43,7 @@ class Result:
     def __getitem__(self, key):
         return ResultItem(self, key)
 
-    ## TODO: implement this
+    ## TODO: implement this:
     # def __call__(self, *args, **kwargs):
     #     raise Exception('I AM BEING CALLED')
     #     return ResultCall(self, args, kwargs)
@@ -266,11 +266,11 @@ def run_task(infile, outfile, do_print=False, do_raise=False):
         task = dill.load(f)
 
     try:
-        task._result = evaluate(task)
+        task._value = evaluate(task)
         task._error = None
     except Exception as err:
         task._error = err
-        task._result = None
+        task._value = None
     finally:
         with open(outfile, 'wb') as f:
             dill.dump(task, f)
