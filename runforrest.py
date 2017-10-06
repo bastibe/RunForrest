@@ -104,11 +104,16 @@ class Executor:
 
     """
 
-    def __init__(self, todo_dir='rf_todo', done_dir='rf_done', fail_dir='rf_failed'):
+    def __init__(self, todo_dir='rf_todo', done_dir='rf_done', fail_dir='rf_fail', autoclean=False):
         self.todo_dir = Path(todo_dir)
         self.done_dir = Path(done_dir)
         self.fail_dir = Path(fail_dir)
+        self.autoclean = autoclean
         self.processes = {}
+
+    def __del__(self):
+        if self.autoclean:
+            self.clean()
 
     def schedule(self, fun, *args, **kwargs):
         """Schedule a function or file for later execution.
@@ -133,11 +138,13 @@ class Executor:
             dill.dump(fun, f)
 
     def run(self, nprocesses=4, flags=None):
-        """Execute all `Results` in the TODO directory.
+        """Execute all `Results` in TODO directory and yield values.
 
         All `Results` are executed in their own processes, and `run`
         makes sure that no more than `nprocesses` are active at any
         time.
+
+        `Results` that raise errors are not yielded.
 
         `flags` can be one of `print` or `raise` if you want errors to
         be printed or raised.
