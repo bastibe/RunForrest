@@ -143,12 +143,14 @@ class Executor:
 
         if not self.done_dir.exists():
             self.done_dir.mkdir()
+        if not self.fail_dir.exists():
+            self.fail_dir.mkdir()
 
         for todo in tqdm(self.todo_dir.iterdir()):
-            self._wait(nprocesses)
+            yield from self._wait(nprocesses)
             self._start_task(todo.name, flags)
 
-        self._wait(1)
+        yield from self._wait(1)
 
     def _start_task(self, file, flags):
         args = ['python', 'runforrest.py', self.todo_dir / file, self.done_dir / file]
@@ -162,17 +164,18 @@ class Executor:
         while len(self.processes) >= nprocesses:
             for file, proc in list(self.processes.items()):
                 if proc.poll() is not None:
-                    self._finish_task(file)
+                    yield self._finish_task(file)
             else:
                 time.sleep(0.1)
 
     def _finish_task(self, file):
-        if self.processes[file].returncode == -1:
-            if not self.failed_dir.exists():
-                self.failed_dir.mkdir()
-            (self.done_dir / file).rename(self.fail_dir / file)
         (self.todo_dir / file).unlink()
-        del self.processes[file]
+        with open(self.done_dir / file, 'rb') as f:
+            task = dill.load(f)
+        process = self.processes.pop(file)
+        if process.returncode == -1:
+            (self.done_dir / file).rename(self.fail_dir / file)
+        return task
 
     def gather(self):
         for done in self.done_dir.iterdir():

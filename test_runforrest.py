@@ -9,8 +9,7 @@ def test_run():
     exe = runforrest.Executor()
     result = runforrest.defer(identity, 42)
     exe.schedule(result)
-    exe.run(nprocesses=4)
-    results = list(exe.gather())
+    results = list(exe.run(nprocesses=4))
     exe.clean()
     assert results[0]._value == 42
 
@@ -20,8 +19,7 @@ def test_nested_run():
     result = runforrest.defer(identity, 42)
     result = runforrest.defer(identity, result)
     exe.schedule(result)
-    exe.run(nprocesses=4)
-    results = list(exe.gather())
+    results = list(exe.run(nprocesses=4))
     exe.clean()
     assert results[0]._value == 42
 
@@ -31,8 +29,7 @@ def test_multiple_runs(howmany=20):
     for v in range(howmany):
         result = runforrest.defer(identity, v)
         exe.schedule(result)
-    exe.run(nprocesses=10)
-    results = [r._value for r in exe.gather()]
+    results = [r._value for r in exe.run(nprocesses=10)]
     exe.clean()
     assert len(results) == howmany
     for r, v in zip(sorted(results), range(howmany)):
@@ -45,8 +42,7 @@ def test_multiple_nested_runs(howmany=20):
         result = runforrest.defer(identity, v)
         result = runforrest.defer(identity, result)
         exe.schedule(result)
-    exe.run(nprocesses=10)
-    results = [r._value for r in exe.gather()]
+    results = [r._value for r in exe.run(nprocesses=10)]
     exe.clean()
     assert len(results) == howmany
     for r, v in zip(sorted(results), range(howmany)):
@@ -60,8 +56,7 @@ def test_result_accessor():
     # retrieve the attribute:
     result = runforrest.defer(identity, result.args)
     exe.schedule(result)
-    exe.run(nprocesses=1)
-    results = list(exe.gather())
+    results = list(exe.run(nprocesses=1))
     exe.clean()
     assert results[0]._value == (42,)
 
@@ -73,7 +68,6 @@ def test_result_indexing():
     # retrieve at index:
     result = runforrest.defer(identity, result[0])
     exe.schedule(result)
-    exe.run(nprocesses=1)
-    results = list(exe.gather())
+    results = list(exe.run(nprocesses=1))
     exe.clean()
     assert results[0]._value == 42
