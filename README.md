@@ -32,7 +32,7 @@ So why is RunForrest better?
 3. Simple. The above call graph will now look like this:
 
 ```python
-fom runforrest import Executor, defer
+from runforrest import Executor, defer
 exe = Executor()
 
 for item in long_list_of_stuff:
