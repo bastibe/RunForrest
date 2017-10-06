@@ -28,7 +28,7 @@ there, I've done that, and was not satisfied.
 So why is RunForrest better? 
 
 1. Understandable. Just short of 200 lines of source code is manageable.
-2. No dependencies. A recent version of Python is all you need.
+2. No complicated dependencies. A recent version of Python with `dill` and `tqdm` is all you need.
 3. Simple. The above call graph will now look like this:
 
 ```python
