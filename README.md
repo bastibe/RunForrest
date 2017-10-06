@@ -1,6 +1,6 @@
 # Run, Forrest, Run!
 
-Because sometimes a single computer is just not fast enough.
+Because sometimes a single Python is just not fast enough.
 
 You have some code that looks like this:
 
@@ -15,7 +15,7 @@ And the problem is, both `prepare` and `dostuff` take too long, and
 takes *ages*.
 
 What can you do? You could use [IPyParallel][ip]!
-Or [Dask.distributed][dd]! Or [`multiprocessing`][mp]!
+Or [Dask.distributed][dd]! Or [multiprocessing][mp]!
 
 [ip]: https://ipyparallel.readthedocs.io/en/latest/
 [dd]: https://distributed.readthedocs.io/en/latest/
@@ -27,37 +27,38 @@ there, I've done that, and was not satisfied.
 
 So why is RunForrest better? 
 
-1. It is simple. Just short of 200 lines of source code is manageable.
-2. No setup. You have SSH access to a remote? There is no step two.
-3. No dependencies. The above call graph will now look like this:
+1. Understandable. Just short of 200 lines of source code is manageable.
+2. No dependencies. A recent version of Python is all you need.
+3. Simple. The above call graph will now look like this:
 
 ```python
-fom runforrest import Executor, deferred
-exe = Executor(nprocesses=4) 
-# or
-exe = SSHExecutor(remotes={'192.168.1.23': ('/usr/bin/python3.6', 4),
-                           '192.168.1.24': ('~/anaconda3/bin/python3.6', 8)})
+fom runforrest import Executor, defer
+exe = Executor()
 
 for item in long_list_of_stuff:
-    intermediate = deferred(prepare, item)
-    result = deferred(dostuff, intermediate[1], intermediate.thing)
+    intermediate = defer(prepare, item)
+    result = defer(dostuff, intermediate[1], intermediate.thing)
     exe.schedule(result)
     
-exe.run()
+for result in exe.run(nprocesses=4):
+    # use result
 ```
 
-Wrap your function calls in `deferred`, `schedule` them on an
-`Executor`, then `run`. That's all there is to it.
+Wrap your function calls in `defer`, `schedule` them on an `Executor`,
+then `run`. That's all there is to it. Deferred functions return
+objects that can be indexed and getattr'd as much as you'd like and
+all of that will be resolved once they are `run` (a single return
+object will never execute more than one time).
 
 But the best thing is, each `schedule` will just create a file in a
 new directory `rf_todo`. Then `run` will execute those files, and put
-them in `rf_done` or `rf_failed` depending on whether there were
-errors or not.
+them in `rf_done` or `rf_fail` depending on whether there were errors
+or not.
 
 This solves so many problems. Maybe you want to try to re-run a failed
 item? Just copy them back over to `rf_todo`, and `run` again. Or
-`python runforrest.py infile outfile` them manually, and observe the
-error first hand!
+`python runforrest.py --do_raise infile outfile` them manually, and
+observe the error first hand!
 
 Yes, it's simple. Stupid simple even, you might say. But it is
 debuggable. It doesn't start a web server. It doesn't set up fancy
