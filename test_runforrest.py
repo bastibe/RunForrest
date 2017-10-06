@@ -71,3 +71,15 @@ def test_result_indexing():
     results = list(exe.run(nprocesses=1))
     exe.clean()
     assert results[0]._value == 42
+
+
+def test_todo_and_done_task_access():
+    exe = runforrest.Executor()
+    result = runforrest.defer(identity, 42)
+    exe.schedule(result)
+    todo = list(exe.todo_tasks())
+    results = list(exe.run(nprocesses=1))
+    done = list(exe.done_tasks())
+    exe.clean()
+    assert results[0] == done[0]
+    assert results[0] == result

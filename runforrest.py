@@ -35,6 +35,9 @@ class Result:
         self._kwargs = kwargs
         self._id = str(id(self))
 
+    def __eq__(self, other):
+        return self._id == other._id and self._args == other._args and self._fun == other._fun
+
     def __getattr__(self, name):
         if name in ['__getstate__', '_id', '_kwargs', '_args', '_fun']:
             raise AttributeError()
@@ -177,9 +180,19 @@ class Executor:
             (self.done_dir / file).rename(self.fail_dir / file)
         return task
 
-    def gather(self):
+    def todo_tasks(self):
+        for todo in self.todo_dir.iterdir():
+            with open(todo, 'rb') as f:
+                yield dill.load(f)
+
+    def done_tasks(self):
         for done in self.done_dir.iterdir():
             with open(done, 'rb') as f:
+                yield dill.load(f)
+
+    def fail_tasks(self):
+        for fail in self.fail_dir.iterdir():
+            with open(fail, 'rb') as f:
                 yield dill.load(f)
 
     def clean(self):
