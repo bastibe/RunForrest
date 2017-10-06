@@ -167,7 +167,7 @@ class Executor:
         while len(self.processes) >= nprocesses:
             for file, proc in list(self.processes.items()):
                 if proc.poll() is not None:
-                    yield self._finish_task(file)
+                    yield from self._finish_task(file)
             else:
                 time.sleep(0.1)
 
@@ -176,9 +176,10 @@ class Executor:
         with open(self.done_dir / file, 'rb') as f:
             task = dill.load(f)
         process = self.processes.pop(file)
-        if process.returncode == -1:
+        if process.returncode == 0:
+            yield task._value
+        else:
             (self.done_dir / file).rename(self.fail_dir / file)
-        return task
 
     def todo_tasks(self):
         for todo in self.todo_dir.iterdir():

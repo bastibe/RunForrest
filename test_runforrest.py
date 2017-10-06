@@ -11,7 +11,7 @@ def test_run():
     exe.schedule(result)
     results = list(exe.run(nprocesses=4))
     exe.clean()
-    assert results[0]._value == 42
+    assert results[0] == 42
 
 
 def test_nested_run():
@@ -21,7 +21,7 @@ def test_nested_run():
     exe.schedule(result)
     results = list(exe.run(nprocesses=4))
     exe.clean()
-    assert results[0]._value == 42
+    assert results[0] == 42
 
 
 def test_multiple_runs(howmany=20):
@@ -29,7 +29,7 @@ def test_multiple_runs(howmany=20):
     for v in range(howmany):
         result = runforrest.defer(identity, v)
         exe.schedule(result)
-    results = [r._value for r in exe.run(nprocesses=10)]
+    results = list(exe.run(nprocesses=10))
     exe.clean()
     assert len(results) == howmany
     for r, v in zip(sorted(results), range(howmany)):
@@ -42,7 +42,7 @@ def test_multiple_nested_runs(howmany=20):
         result = runforrest.defer(identity, v)
         result = runforrest.defer(identity, result)
         exe.schedule(result)
-    results = [r._value for r in exe.run(nprocesses=10)]
+    results = list(exe.run(nprocesses=10))
     exe.clean()
     assert len(results) == howmany
     for r, v in zip(sorted(results), range(howmany)):
@@ -58,7 +58,7 @@ def test_result_accessor():
     exe.schedule(result)
     results = list(exe.run(nprocesses=1))
     exe.clean()
-    assert results[0]._value == (42,)
+    assert results[0] == (42,)
 
 
 def test_result_indexing():
@@ -70,7 +70,7 @@ def test_result_indexing():
     exe.schedule(result)
     results = list(exe.run(nprocesses=1))
     exe.clean()
-    assert results[0]._value == 42
+    assert results[0] == 42
 
 
 def test_todo_and_done_task_access():
@@ -78,8 +78,7 @@ def test_todo_and_done_task_access():
     result = runforrest.defer(identity, 42)
     exe.schedule(result)
     todo = list(exe.todo_tasks())
-    results = list(exe.run(nprocesses=1))
+    list(exe.run(nprocesses=1))
     done = list(exe.done_tasks())
     exe.clean()
-    assert results[0] == done[0]
-    assert results[0] == result
+    assert result == done[0] == todo[0]
