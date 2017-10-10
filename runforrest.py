@@ -342,7 +342,7 @@ def evaluate(result, known_results=None):
                 raise TypeError(f'unknown Result {type(result)}')
         else: # is Result
             args = [evaluate(arg, known_results) for arg in result._args]
-            kwargs = {k: evaluate(v, known_results) for k, v in result._kwargs}
+            kwargs = {k: evaluate(v, known_results) for k, v in result._kwargs.items()}
             return_value = result._fun(*args, **kwargs)
             known_results[result._id] = return_value
 
