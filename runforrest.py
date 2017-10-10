@@ -156,11 +156,23 @@ class Executor:
         if not self.fail_dir.exists():
             self.fail_dir.mkdir()
 
-        for todo in tqdm(self.todo_dir.iterdir()):
-            yield from self._wait(nprocesses)
-            self._start_task(todo.name, flags)
+        class ResultIterator:
+            def __init__(self, parent, todo):
+                self.parent = parent
+                self.todo = todo
 
-        yield from self._wait(1)
+            def __iter__(self):
+                parent = self.parent
+                for todo in self.todo:
+                    yield from parent._wait(nprocesses)
+                    parent._start_task(todo.name, flags)
+                # wait for running jobs to finish:
+                yield from parent._wait(1)
+
+            def __len__(self):
+                return len(self.todo)
+
+        return ResultIterator(self, list(self.todo_dir.iterdir()))
 
     def _start_task(self, file, flags):
         args = ['python', 'runforrest.py', self.todo_dir / file, self.done_dir / file]
