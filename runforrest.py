@@ -192,15 +192,23 @@ class Executor:
                 time.sleep(0.1)
 
     def _finish_task(self, file):
+        process = self.processes.pop(file)
+
         if not (self.done_dir / file).exists():
             (self.todo_dir / file).rename(self.fail_dir / file)
             print(f'task {file} failed without error.')
             return
 
         (self.todo_dir / file).unlink()
-        with open(self.done_dir / file, 'rb') as f:
-            task = dill.load(f)
-        process = self.processes.pop(file)
+
+        try:
+            with open(self.done_dir / file, 'rb') as f:
+                task = dill.load(f)
+        except Exception as err:
+            print(f'could not load result of task {file} because {err}.')
+            (self.done_dir / file).rename(self.fail_dir / file)
+            return
+
         if process.returncode == 0:
             yield task._value
         else:
