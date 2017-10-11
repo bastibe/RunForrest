@@ -2,6 +2,7 @@ from uuid import uuid4 as uuid
 from pathlib import Path
 from subprocess import Popen
 import sys
+import os
 from argparse import ArgumentParser
 from tqdm import tqdm
 import dill
@@ -175,12 +176,12 @@ class Executor:
         return ResultIterator(self, list(self.todo_dir.iterdir()))
 
     def _start_task(self, file, flags):
-        args = ['python', 'runforrest.py', self.todo_dir / file, self.done_dir / file]
+        args = ['python', '-m', 'runforrest', self.todo_dir / file, self.done_dir / file]
         if flags == 'print':
             args.append('-p')
         if flags == 'raise':
             args.append('-r')
-        self.processes[file] = Popen(args)
+        self.processes[file] = Popen(args, cwd=os.getcwd())
 
     def _wait(self, nprocesses):
         while len(self.processes) >= nprocesses:
