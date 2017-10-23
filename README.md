@@ -71,3 +71,7 @@ computers, and it probably still contains bugs and stuff.
 Finally, writing this is not my main job, and I won't be able to
 answer and fix every pull request at enterprise speed. Please be civil
 if I can't respond quickly.
+
+## FAQ:
+
+- *Code that calls Numpy crashes in `pthread_create`*: By default, Numpy creates a large number of threads. If you run many Numpies in parallel, this can exhaust your thread limit. You can either raise your thread limit (`resources.setrlimit(resources.RLIMIT_NPROC, ...)`) or force Numpy to use only one thread per process (`os.putenv('OMP_NUM_THREADS', '1')`).

@@ -105,10 +105,11 @@ class Executor:
 
     """
 
-    def __init__(self, todo_dir='rf_todo', done_dir='rf_done', fail_dir='rf_fail', autoclean=False):
+    def __init__(self, todo_dir='rf_todo', done_dir='rf_done', fail_dir='rf_fail', session_file='rf_session', autoclean=False):
         self.todo_dir = Path(todo_dir)
         self.done_dir = Path(done_dir)
         self.fail_dir = Path(fail_dir)
+        self.session_file = Path(session_file)
         self.autoclean = autoclean
         self.processes = {}
 
@@ -157,6 +158,8 @@ class Executor:
         if not self.fail_dir.exists():
             self.fail_dir.mkdir()
 
+        dill.dump_session(self.session_file)
+
         class ResultIterator:
             def __init__(self, parent, todo):
                 self.parent = parent
@@ -176,7 +179,7 @@ class Executor:
         return ResultIterator(self, list(self.todo_dir.iterdir()))
 
     def _start_task(self, file, flags):
-        args = ['python', '-m', 'runforrest', self.todo_dir / file, self.done_dir / file]
+        args = ['python', '-m', 'runforrest', self.todo_dir / file, self.done_dir / file, '-s', self.session_file]
         if flags == 'print':
             args.append('-p')
         if flags == 'raise':
@@ -239,6 +242,8 @@ class Executor:
         remove(self.todo_dir)
         remove(self.fail_dir)
         remove(self.done_dir)
+        if self.session_file.exists():
+            self.session_file.unlink()
 
 
 class SSHExecutor(Executor):
@@ -298,20 +303,26 @@ def main():
     parser = ArgumentParser(description="Run an enqueued function")
     parser.add_argument('infile', help='contains the enqueued function')
     parser.add_argument('outfile', help='contains the evaluation results')
-    parser.add_argument('-p', '--do_print', action='store_true')
-    parser.add_argument('-r', '--do_raise', action='store_true')
+    parser.add_argument('-s', '--sessionfile', action='store', default=None)
+    parser.add_argument('-p', '--do_print', action='store_true', default=False)
+    parser.add_argument('-r', '--do_raise', action='store_true', default=False)
 
     args = parser.parse_args()
-    run_task(args.infile, args.outfile, args.do_print, args.do_raise)
+    run_task(args.infile, args.outfile, args.sessionfile, args.do_print, args.do_raise)
 
 
-def run_task(infile, outfile, do_print=False, do_raise=False):
+def run_task(infile, outfile, sessionfile, do_print, do_raise):
     """Execute `infile` and produce `outfile`.
+
+    If `sessionfile` is given, load session from that file.
 
     Set `do_print` or `do_raise` to `True` if errors should be printed or
     raised.
 
     """
+
+    if Path(sessionfile).exists():
+        dill.load_session(sessionfile)
 
     with open(infile, 'rb') as f:
         task = dill.load(f)
