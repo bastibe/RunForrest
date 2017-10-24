@@ -9,6 +9,6 @@ setup(
     url='https://github.com/bastibe/RunForrest',
     license='BSD 3-clause',
     py_modules=['runforrest'],
-    install_requires=['tqdm', 'dill'],
+    install_requires=['dill'],
     python_requires='>=3.4'
 )

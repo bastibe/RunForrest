@@ -4,7 +4,6 @@ from subprocess import Popen
 import sys
 import os
 from argparse import ArgumentParser
-from tqdm import tqdm
 import dill
 import time
 
