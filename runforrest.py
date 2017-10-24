@@ -139,7 +139,7 @@ class Executor:
         with open(self.todo_dir / str(uuid()), 'wb') as f:
             dill.dump(fun, f)
 
-    def run(self, nprocesses=4, flags=None):
+    def run(self, nprocesses=4, flags=None, save_session=False):
         """Execute all `Results` in TODO directory and yield values.
 
         All `Results` are executed in their own processes, and `run`
@@ -151,6 +151,9 @@ class Executor:
         `flags` can be one of `print` or `raise` if you want errors to
         be printed or raised.
 
+        Use `save_session` to recreate all current globals in each
+        process.
+
         """
 
         if not self.done_dir.exists():
@@ -158,28 +161,31 @@ class Executor:
         if not self.fail_dir.exists():
             self.fail_dir.mkdir()
 
-        dill.dump_session(self.session_file)
+        if save_session:
+            dill.dump_session(self.session_file)
 
         class ResultIterator:
-            def __init__(self, parent, todo):
+            def __init__(self, parent, todos, save_session):
                 self.parent = parent
-                self.todo = todo
+                self.todos = todos
+                self.save_session = save_session
 
             def __iter__(self):
-                parent = self.parent
-                for todo in self.todo:
-                    yield from parent._wait(nprocesses)
-                    parent._start_task(todo.name, flags)
+                for todo in self.todos:
+                    yield from self.parent._wait(nprocesses)
+                    self.parent._start_task(todo.name, flags, save_session)
                 # wait for running jobs to finish:
-                yield from parent._wait(1)
+                yield from self.parent._wait(1)
 
             def __len__(self):
-                return len(self.todo)
+                return len(self.todos)
 
-        return ResultIterator(self, list(self.todo_dir.iterdir()))
+        return ResultIterator(self, list(self.todo_dir.iterdir()), save_session)
 
-    def _start_task(self, file, flags):
-        args = ['python', '-m', 'runforrest', self.todo_dir / file, self.done_dir / file, '-s', self.session_file]
+    def _start_task(self, file, flags, save_session):
+        args = ['python', '-m', 'runforrest', self.todo_dir / file, self.done_dir / file]
+        if save_session:
+            args += ['-s', self.session_file]
         if flags == 'print':
             args.append('-p')
         if flags == 'raise':
@@ -321,8 +327,8 @@ def run_task(infile, outfile, sessionfile, do_print, do_raise):
 
     """
 
-    if Path(sessionfile).exists():
-        dill.load_session(sessionfile)
+    if sessionfile:
+        dill.load_session(Path(sessionfile))
 
     with open(infile, 'rb') as f:
         task = dill.load(f)

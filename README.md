@@ -74,4 +74,15 @@ if I can't respond quickly.
 
 ## FAQ:
 
-- *Code that calls Numpy crashes in `pthread_create`*: By default, Numpy creates a large number of threads. If you run many Numpies in parallel, this can exhaust your thread limit. You can either raise your thread limit (`resources.setrlimit(resources.RLIMIT_NPROC, ...)`) or force Numpy to use only one thread per process (`os.putenv('OMP_NUM_THREADS', '1')`).
+- *Code that calls Numpy crashes in `pthread_create`*: By default,
+  Numpy creates a large number of threads. If you run many Numpies in
+  parallel, this can exhaust your thread limit. You can either raise
+  your thread limit 
+  (`resources.setrlimit(resources.RLIMIT_NPROC, ...)`) or force Numpy
+  to use only one thread per process 
+  (`os.putenv('OMP_NUM_THREADS', '1')`).
+
+- *Tasks fail because `"name '<module>' is not defined"`*: Sometimes,
+  serialization can fail if `run` is called from a 
+  `if __name__ == "__main__"` block. Set `save_session=True` in run
+  to fix this problem (for a small performance overhead).
