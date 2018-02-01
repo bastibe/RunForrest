@@ -33,12 +33,12 @@ So why is RunForrest better?
 
 ```python
 from runforrest import TaskList, defer
-tasklist = TaskList()
+tasklist = TaskList('tasklist')
 
 for item in long_list_of_stuff:
     task = defer(prepare, item)
     task = defer(dostuff, task[1], task.thing)
-    exe.schedule(task)
+    tasklist.schedule(task)
     
 for task in tasklist.run(nprocesses=4):
     result = task.returnvalue # or task.errorvalue
