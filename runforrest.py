@@ -88,19 +88,19 @@ class TaskItem(PartOfTask):
 
 
 class TaskList:
-    """Evaluate `Tasks` and calculate their true return values.
+    """Schedule tasks and run them in many processes.
 
-    An `TaskList` schedules `Tasks`, and then executes them on
-    several processes in parallel. For each `Task`, it walks the
-    call chain, and executes all the code necessary to calculate the
-    return values. The `TaskList` takes great pride in not evaluating
-    `Tasks` more often than necessary, even if several
-    `PartOfTasks` lead to the same original `Task`.
+    A `TaskList` schedules `Tasks`, and then executes them on several
+    processes in parallel. For each `Task`, it walks the call chain,
+    and executes all the code necessary to calculate the return
+    values. The `TaskList` takes great pride in not evaluating `Tasks`
+    more often than necessary, even if several `PartOfTasks` lead to
+    the same original `Task`.
 
     By default, `schedule` dumps each `Task` in the directory
-    `rf_todo`. Once the `Task` has been executed, it is transferred
-    to either `rf_done` or `rf_failed`, depending on whether it raised
-    errors or not.
+    `{directory}/todo`. Once the `Task` has been executed, it is
+    transferred to either `{directory}/done` or `{directory}/failed`,
+    depending on whether it raised errors or not.
 
     The `TaskList` delegates all the actual running of code to
     `evaluate`, which is called by invoking this very script as a
@@ -109,10 +109,8 @@ class TaskList:
 
     """
 
-    def __init__(self, name=None, exist_ok=False, pre_clean=True, post_clean=False):
-        if name is None:
-            name = 'tasklist'
-        self._directory = Path(name)
+    def __init__(self, directory, exist_ok=False, pre_clean=True, post_clean=False):
+        self._directory = Path(directory)
         self._post_clean = post_clean
 
         if self._directory.exists():
@@ -132,33 +130,34 @@ class TaskList:
         if self._post_clean:
             self.clean()
 
-    def schedule(self, fun, metadata=None):
-        """Schedule a function or file for later execution.
+    def schedule(self, task, metadata=None):
+        """Schedule a task for later execution.
 
-        The Task `fun` is saved to the TODO directory. Use `run` to
-        execute all the `Tasks` in the TODO directory.
+        The task is saved to the `{directory}/todo` directory. Use
+        `run` to execute all the tasks in the `{directory}/todo}
+        directory.
+
+        If you want, you can attach metadata to the task, which you
+        can retrieve as `task.metadata` after the task has been run.
 
         """
 
-        if callable(fun):
-            fun = defer(fun, *args, **kwargs)
-
-        fun.metadata = metadata
+        if metadata is not None:
+            task.metadata = metadata
 
         with (self._directory / 'todo' / (str(uuid()) + '.pkl')).open('wb') as f:
-            dill.dump(fun, f)
+            dill.dump(task, f)
 
-    def run(self, nprocesses=4, flags=None, save_session=False, skip_fail=True):
-        """Execute all `Tasks` in TODO directory and yield values.
+    def run(self, nprocesses=4, print_errors=False, save_session=False):
+        """Execute all tasks in the `{directory}/todo}` directory.
 
-        All `Tasks` are executed in their own processes, and `run`
-        makes sure that no more than `nprocesses` are active at any
-        time.
+        All tasks are executed in their own processes, and `run` makes
+        sure that no more than `nprocesses` are active at any time.
 
-        `Tasks` that raise errors are not yielded.
-
-        `flags` can be one of `print` or `raise` if you want errors to
-        be printed or raised.
+        If `print_errors=True`, processes will print full stack traces
+        of failing tasks. Since these errors happen on another
+        process, this will not be caught by the debugger, and will not
+        stop the `run`.
 
         Use `save_session` to recreate all current globals in each
         process.
@@ -176,78 +175,77 @@ class TaskList:
 
             def __iter__(self):
                 for todo in self.todos:
-                    yield from self.wait(nprocesses)
-                    self.parent._start_task(todo.name, flags, save_session)
+                    yield from self.parent._finish_tasks(nprocesses)
+                    self.parent._start_task(todo.name, print_errors, save_session)
                 # wait for running jobs to finish:
-                yield from self.wait(1)
-
-            def wait(self, nprocesses):
-                for task in self.parent._wait(nprocesses):
-                    if not skip_fail or task.errorvalue is None:
-                        yield task
+                yield from self.parent._finish_tasks(1)
 
             def __len__(self):
                 return len(self.todos)
 
         return TaskIterator(self, list((self._directory / 'todo').iterdir()), save_session)
 
-    def _start_task(self, file, flags, save_session):
+    def _start_task(self, taskfilename, print_errors, save_session):
+        """Start a new process, and append to self._processes."""
         args = ['python', '-m', 'runforrest',
-                self._directory / 'todo' / file,
-                self._directory / 'done' / file]
+                self._directory / 'todo' / taskfilename,
+                self._directory / 'done' / taskfilename]
+        if print_errors:
+            args += ['-p']
         if save_session:
             args += ['-s', self._directory / 'session.pkl']
-        if flags == 'print':
-            args.append('-p')
-        if flags == 'raise':
-            args.append('-r')
-        self._processes[file] = Popen(args, cwd=os.getcwd())
+        self._processes[taskfilename] = Popen(args, cwd=os.getcwd())
 
-    def _wait(self, nprocesses):
+    def _finish_tasks(self, nprocesses):
+        """Wait while `nprocesses` are running and return finished tasks."""
         while len(self._processes) >= nprocesses:
             for file, proc in list(self._processes.items()):
                 if proc.poll() is not None:
-                    yield from self._finish_task(file)
+                    yield self._retrieve_task(file)
+                    del self._processes[file]
             else:
                 time.sleep(0.1)
 
-    def _finish_task(self, file):
-        process = self._processes.pop(file)
-
-        if not (self._directory / 'done' / file).exists():
-            with (self._directory / 'todo' / file).open('rb') as f:
+    def _retrieve_task(self, taskfilename):
+        """Load task, and sort into `{directory}/done` or `{directory}/fail`."""
+        if not (self._directory / 'done' / taskfilename).exists():
+            with (self._directory / 'todo' / taskfilename).open('rb') as f:
                 task = dill.load(f)
                 task.returnvalue = None
                 task.errorvalue = RuntimeError('Task failed with unknown error.')
-            with (self._directory / 'done' / file).open('wb') as f:
+            with (self._directory / 'done' / taskfilename).open('wb') as f:
                 dill.dump(task, f)
 
-        (self._directory / 'todo' / file).unlink()
+        (self._directory / 'todo' / taskfilename).unlink()
 
-        with (self._directory / 'done' / file).open('rb') as f:
+        with (self._directory / 'done' / taskfilename).open('rb') as f:
             task = dill.load(f)
 
-        if process.returncode != 0:
-            (self._directory / 'done' / file).rename(self._directory / 'fail' / file)
+        if task.errorvalue is not None:
+            (self._directory / 'done' / taskfilename).rename(self._directory / 'fail' / taskfilename)
 
-        yield task
+        return task
 
     def todo_tasks(self):
+        """Yield all tasks in `{directory}/todo`."""
         for todo in (self._directory / 'todo').iterdir():
             with todo.open('rb') as f:
                 yield dill.load(f)
 
     def done_tasks(self):
+        """Yield all tasks in `{directory}/done`."""
         for done in (self._directory / 'done').iterdir():
             with done.open('rb') as f:
                 yield dill.load(f)
 
     def fail_tasks(self):
+        """Yield all tasks in `{directory}/fail`."""
         for fail in (self._directory / 'fail').iterdir():
             with fail.open('rb') as f:
                 yield dill.load(f)
 
     def clean(self):
+        """Remove `{directory}` and all todo/done/fail tasks."""
         def remove(dir):
             if dir.exists():
                 for f in dir.iterdir():
@@ -301,9 +299,6 @@ def run_task(infile, outfile, sessionfile, do_print, do_raise):
 
     if task.errorvalue is not None and do_raise:
         raise task.errorvalue
-
-    if task.errorvalue is not None and do_print:
-        print(task.errorvalue)
 
     sys.exit(0 if task.errorvalue is None else -1)
 

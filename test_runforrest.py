@@ -7,7 +7,7 @@ def identity(n):
 
 
 def test_run():
-    tasklist = runforrest.TaskList(post_clean=True)
+    tasklist = runforrest.TaskList('tmp', post_clean=True)
     task = runforrest.defer(identity, 42)
     tasklist.schedule(task)
     tasks = list(tasklist.run(nprocesses=4))
@@ -15,7 +15,7 @@ def test_run():
 
 
 def test_nested_run():
-    tasklist = runforrest.TaskList(post_clean=True)
+    tasklist = runforrest.TaskList('tmp', post_clean=True)
     task = runforrest.defer(identity, 42)
     task = runforrest.defer(identity, task)
     tasklist.schedule(task)
@@ -24,7 +24,7 @@ def test_nested_run():
 
 
 def test_multiple_runs(howmany=20):
-    tasklist = runforrest.TaskList(post_clean=True)
+    tasklist = runforrest.TaskList('tmp', post_clean=True)
     for v in range(howmany):
         task = runforrest.defer(identity, v)
         tasklist.schedule(task)
@@ -35,7 +35,7 @@ def test_multiple_runs(howmany=20):
 
 
 def test_multiple_nested_runs(howmany=20):
-    tasklist = runforrest.TaskList(post_clean=True)
+    tasklist = runforrest.TaskList('tmp', post_clean=True)
     for v in range(howmany):
         task = runforrest.defer(identity, v)
         task = runforrest.defer(identity, task)
@@ -47,7 +47,7 @@ def test_multiple_nested_runs(howmany=20):
 
 
 def test_task_accessor():
-    tasklist = runforrest.TaskList(post_clean=True)
+    tasklist = runforrest.TaskList('tmp', post_clean=True)
     # send something that has an attribute:
     task = runforrest.defer(identity, Exception(42))
     # retrieve the attribute:
@@ -58,7 +58,7 @@ def test_task_accessor():
 
 
 def test_task_indexing():
-    tasklist = runforrest.TaskList(post_clean=True)
+    tasklist = runforrest.TaskList('tmp', post_clean=True)
     # send something that can be indexed:
     task = runforrest.defer(identity, [42])
     # retrieve at index:
@@ -69,7 +69,7 @@ def test_task_indexing():
 
 
 def test_todo_and_done_task_access():
-    tasklist = runforrest.TaskList(post_clean=True)
+    tasklist = runforrest.TaskList('tmp', post_clean=True)
     task = runforrest.defer(identity, 42)
     tasklist.schedule(task)
     todo = list(tasklist.todo_tasks())
@@ -79,7 +79,7 @@ def test_todo_and_done_task_access():
 
 
 def test_metadata():
-    tasklist = runforrest.TaskList(post_clean=True)
+    tasklist = runforrest.TaskList('tmp', post_clean=True)
     task = runforrest.defer(identity, 42)
     tasklist.schedule(task, metadata='the truth')
     list(tasklist.run(nprocesses=1))
@@ -92,48 +92,53 @@ def crash():
 
 
 def test_failing_task():
-    tasklist = runforrest.TaskList(post_clean=True)
+    tasklist = runforrest.TaskList('tmp', post_clean=True)
     task = runforrest.defer(crash)
     tasklist.schedule(task)
     tasks = list(tasklist.run(nprocesses=1))
-    assert len(tasks) == 0
+    assert len(tasks) == 1
+    assert tasks[0] == task
     fail = list(tasklist.fail_tasks())
     assert len(fail) == 1
     assert fail[0] == task
     assert fail[0].errorvalue.args == ('TESTING',)
+    done = list(tasklist.done_tasks())
+    assert len(done) == 0
 
 
 def test_invalid_task():
-    tasklist = runforrest.TaskList(post_clean=True)
+    tasklist = runforrest.TaskList('tmp', post_clean=True)
     task = runforrest.defer(0) # not a function!
     tasklist.schedule(task)
     tasks = list(tasklist.run(nprocesses=1))
-    assert len(tasks) == 0
+    assert len(tasks) == 1
     fail = list(tasklist.fail_tasks())
     assert len(fail) == 1
     assert fail[0] == task
     assert isinstance(fail[0].errorvalue, TypeError)
+    done = list(tasklist.done_tasks())
+    assert len(done) == 0
 
 
 def test_post_clean_true():
-    tasklist = runforrest.TaskList(post_clean=True)
+    tasklist = runforrest.TaskList('tmp', post_clean=True)
     task = runforrest.defer(crash)
     tasklist.schedule(task)
     list(tasklist.run(nprocesses=1))
     del tasklist
-    assert not pathlib.Path('tasklist').exists()
-    assert not pathlib.Path('tasklist/todo').exists()
-    assert not pathlib.Path('tasklist/done').exists()
-    assert not pathlib.Path('tasklist/fail').exists()
+    assert not pathlib.Path('tmp').exists()
+    assert not pathlib.Path('tmp/todo').exists()
+    assert not pathlib.Path('tmp/done').exists()
+    assert not pathlib.Path('tmp/fail').exists()
 
 
 def test_post_clean_false():
-    tasklist = runforrest.TaskList(post_clean=False)
+    tasklist = runforrest.TaskList('tmp', post_clean=False)
     task = runforrest.defer(crash)
     tasklist.schedule(task)
     list(tasklist.run(nprocesses=1))
     del tasklist
-    for path in ['tasklist/todo', 'tasklist/done', 'tasklist/fail', 'tasklist']:
+    for path in ['tmp/todo', 'tmp/done', 'tmp/fail', 'tmp']:
         path = pathlib.Path(path)
         assert path.exists()
         for file in path.iterdir():
