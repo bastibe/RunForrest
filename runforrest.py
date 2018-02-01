@@ -91,16 +91,27 @@ class TaskList:
 
     """
 
-    def __init__(self, todo_dir='rf_todo', done_dir='rf_done', fail_dir='rf_fail', session_file='rf_session', autoclean=False):
-        self.todo_dir = Path(todo_dir)
-        self.done_dir = Path(done_dir)
-        self.fail_dir = Path(fail_dir)
-        self.session_file = Path(session_file)
-        self.autoclean = autoclean
-        self.processes = {}
+    def __init__(self, name=None, exist_ok=False, pre_clean=True, post_clean=False):
+        if name is None:
+            name = 'tasklist'
+        self._directory = Path(name)
+        self._post_clean = post_clean
+
+        if self._directory.exists():
+            if not exist_ok:
+                raise RuntimeError(f'TaskList directory {str(self._directory)} already exists')
+            if pre_clean:
+                self.clean()
+
+        for dir in [self._directory, self._directory / 'todo',
+                    self._directory / 'done', self._directory / 'fail']:
+            if not dir.exists():
+                dir.mkdir()
+
+        self._processes = {}
 
     def __del__(self):
-        if self.autoclean:
+        if self._post_clean:
             self.clean()
 
     def schedule(self, fun, *args, **kwargs):
@@ -119,10 +130,7 @@ class TaskList:
         if callable(fun):
             fun = defer(fun, *args, **kwargs)
 
-        if not self.todo_dir.exists():
-            self.todo_dir.mkdir()
-
-        with open(self.todo_dir / str(uuid()), 'wb') as f:
+        with open(self._directory / 'todo' / (str(uuid()) + '.pkl'), 'wb') as f:
             dill.dump(fun, f)
 
     def run(self, nprocesses=4, flags=None, save_session=False):
@@ -142,13 +150,8 @@ class TaskList:
 
         """
 
-        if not self.done_dir.exists():
-            self.done_dir.mkdir()
-        if not self.fail_dir.exists():
-            self.fail_dir.mkdir()
-
         if save_session:
-            dill.dump_session(self.session_file)
+            dill.dump_session(self._directory / 'session.pkl')
 
         class TaskIterator:
             def __init__(self, parent, todos, save_session):
@@ -166,62 +169,64 @@ class TaskList:
             def __len__(self):
                 return len(self.todos)
 
-        return TaskIterator(self, list(self.todo_dir.iterdir()), save_session)
+        return TaskIterator(self, list((self._directory / 'todo').iterdir()), save_session)
 
     def _start_task(self, file, flags, save_session):
-        args = ['python', '-m', 'runforrest', self.todo_dir / file, self.done_dir / file]
+        args = ['python', '-m', 'runforrest',
+                self._directory / 'todo' / file,
+                self._directory / 'done' / file]
         if save_session:
-            args += ['-s', self.session_file]
+            args += ['-s', self._directory / 'session.pkl']
         if flags == 'print':
             args.append('-p')
         if flags == 'raise':
             args.append('-r')
-        self.processes[file] = Popen(args, cwd=os.getcwd())
+        self._processes[file] = Popen(args, cwd=os.getcwd())
 
     def _wait(self, nprocesses):
-        while len(self.processes) >= nprocesses:
-            for file, proc in list(self.processes.items()):
+        while len(self._processes) >= nprocesses:
+            for file, proc in list(self._processes.items()):
                 if proc.poll() is not None:
                     yield from self._finish_task(file)
             else:
                 time.sleep(0.1)
 
     def _finish_task(self, file):
-        process = self.processes.pop(file)
+        process = self._processes.pop(file)
 
-        if not (self.done_dir / file).exists():
-            (self.todo_dir / file).rename(self.fail_dir / file)
+        if not (self._directory / 'done' / file).exists():
+            (self._directory / 'todo' / file).rename(self._directory / 'fail' / file)
             print(f'task {file} failed without error.')
             return
 
-        (self.todo_dir / file).unlink()
+        (self._directory / 'todo' / file).unlink()
 
         try:
-            with open(self.done_dir / file, 'rb') as f:
+            with open(self._directory / 'done' / file, 'rb') as f:
                 task = dill.load(f)
         except Exception as err:
             print(f'could not load result of task {file} because {err}.')
-            (self.done_dir / file).rename(self.fail_dir / file)
+            (self._directory / 'done' / file).rename(self._directory / 'fail' / file)
             return
 
         if process.returncode == 0:
             yield task._value
         else:
             print(f'task {file} failed with error {task._error}.')
-            (self.done_dir / file).rename(self.fail_dir / file)
+            (self._directory / 'done' / file).rename(self._directory / 'fail' / file)
 
     def todo_tasks(self):
-        for todo in self.todo_dir.iterdir():
+        for todo in (self._directory / 'todo').iterdir():
             with open(todo, 'rb') as f:
                 yield dill.load(f)
 
     def done_tasks(self):
-        for done in self.done_dir.iterdir():
+        for done in (self._directory / 'done').iterdir():
             with open(done, 'rb') as f:
                 yield dill.load(f)
 
     def fail_tasks(self):
-        for fail in self.fail_dir.iterdir():
+        for fail in (self._directory / 'fail').iterdir():
             with open(fail, 'rb') as f:
                 yield dill.load(f)
 
@@ -231,11 +236,12 @@ class TaskList:
                 for f in dir.iterdir():
                     f.unlink()
                 dir.rmdir()
-        remove(self.todo_dir)
-        remove(self.fail_dir)
-        remove(self.done_dir)
-        if self.session_file.exists():
-            self.session_file.unlink()
+        remove(self._directory / 'todo')
+        remove(self._directory / 'fail')
+        remove(self._directory / 'done')
+        if (self._directory / 'session.pkl').exists():
+            (self._directory / 'session.pkl').unlink()
+        remove(self._directory)
 
 
 def main():
@@ -285,11 +291,11 @@ def run_task(infile, outfile, sessionfile, do_print, do_raise):
     sys.exit(0 if task._error is None else -1)
 
 
-def evaluate(result, known_results=None):
-    """Execute a `result` and calculate its return value.
+def evaluate(task, known_results=None):
+    """Execute a `task` and calculate its return value.
 
-    `evaluate` walks the call chain to the `result`, and executes all
-    the code necessary to calculate the return values. No `result` are
+    `evaluate` walks the call chain to the `task`, and executes all
+    the code necessary to calculate the return values. No `task` are
     executed more than once, even if several `PartOfTasks` lead to
     the same original `Task`.
 
@@ -299,31 +305,29 @@ def evaluate(result, known_results=None):
 
     """
 
-    # because pickling breaks isinstance(result, Task)
-    if not 'Task' in result.__class__.__name__:
-        return result
+    # because pickling breaks isinstance(task, Task)
+    if not 'Task' in task.__class__.__name__:
+        return task
 
     if known_results is None:
         known_results = {}
 
-    if result._id not in known_results:
-        if result.__class__.__name__ in ['TaskItem', 'TaskCall', 'TaskAttribute']:
-            return_value = evaluate(result._parent, known_results)
-            if result.__class__.__name__ == 'TaskItem':
-                known_results[result._id] = return_value[result._index]
-            elif result.__class__.__name__ == 'TaskCall':
-                known_results[result._id] = return_value()
-            elif result.__class__.__name__ == 'TaskAttribute':
-                known_results[result._id] = getattr(return_value, result._index)
+    if task._id not in known_results:
+        if task.__class__.__name__ in ['TaskItem', 'TaskAttribute']:
+            return_value = evaluate(task._parent, known_results)
+            if task.__class__.__name__ == 'TaskItem':
+                known_results[task._id] = return_value[task._index]
+            elif task.__class__.__name__ == 'TaskAttribute':
+                known_results[task._id] = getattr(return_value, task._index)
             else:
-                raise TypeError(f'unknown Task {type(result)}')
+                raise TypeError(f'unknown Task {type(task)}')
         else: # is Task
-            args = [evaluate(arg, known_results) for arg in result._args]
-            kwargs = {k: evaluate(v, known_results) for k, v in result._kwargs.items()}
-            return_value = result._fun(*args, **kwargs)
-            known_results[result._id] = return_value
+            args = [evaluate(arg, known_results) for arg in task._args]
+            kwargs = {k: evaluate(v, known_results) for k, v in task._kwargs.items()}
+            return_value = task._fun(*args, **kwargs)
+            known_results[task._id] = return_value
 
-    return known_results[result._id]
+    return known_results[task._id]
 
 
 if __name__ == '__main__':
