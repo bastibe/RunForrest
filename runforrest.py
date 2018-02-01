@@ -244,19 +244,23 @@ class TaskList:
             with fail.open('rb') as f:
                 yield dill.load(f)
 
-    def clean(self):
+    def clean(self, clean_todo=True, clean_done=True, clean_fail=True):
         """Remove `{directory}` and all todo/done/fail tasks."""
         def remove(dir):
             if dir.exists():
                 for f in dir.iterdir():
                     f.unlink()
                 dir.rmdir()
-        remove(self._directory / 'todo')
-        remove(self._directory / 'fail')
-        remove(self._directory / 'done')
-        if (self._directory / 'session.pkl').exists():
-            (self._directory / 'session.pkl').unlink()
-        remove(self._directory)
+        if clean_todo:
+            remove(self._directory / 'todo')
+        if clean_fail:
+            remove(self._directory / 'fail')
+        if clean_done:
+            remove(self._directory / 'done')
+        if clean_todo and clean_fail and clean_done:
+            if (self._directory / 'session.pkl').exists():
+                (self._directory / 'session.pkl').unlink()
+            remove(self._directory)
 
 
 def main():
