@@ -7,75 +7,75 @@ def identity(n):
 
 
 def test_run():
-    exe = runforrest.Executor(autoclean=True)
-    result = runforrest.defer(identity, 42)
-    exe.schedule(result)
-    results = list(exe.run(nprocesses=4))
-    assert results[0] == 42
+    tasklist = runforrest.TaskList(autoclean=True)
+    task = runforrest.defer(identity, 42)
+    tasklist.schedule(task)
+    tasks = list(tasklist.run(nprocesses=4))
+    assert tasks[0] == 42
 
 
 def test_nested_run():
-    exe = runforrest.Executor(autoclean=True)
-    result = runforrest.defer(identity, 42)
-    result = runforrest.defer(identity, result)
-    exe.schedule(result)
-    results = list(exe.run(nprocesses=4))
-    assert results[0] == 42
+    tasklist = runforrest.TaskList(autoclean=True)
+    task = runforrest.defer(identity, 42)
+    task = runforrest.defer(identity, task)
+    tasklist.schedule(task)
+    tasks = list(tasklist.run(nprocesses=4))
+    assert tasks[0] == 42
 
 
 def test_multiple_runs(howmany=20):
-    exe = runforrest.Executor(autoclean=True)
+    tasklist = runforrest.TaskList(autoclean=True)
     for v in range(howmany):
-        result = runforrest.defer(identity, v)
-        exe.schedule(result)
-    results = list(exe.run(nprocesses=10))
-    assert len(results) == howmany
-    for r, v in zip(sorted(results), range(howmany)):
+        task = runforrest.defer(identity, v)
+        tasklist.schedule(task)
+    tasks = list(tasklist.run(nprocesses=10))
+    assert len(tasks) == howmany
+    for r, v in zip(sorted(tasks), range(howmany)):
         assert r == v
 
 
 def test_multiple_nested_runs(howmany=20):
-    exe = runforrest.Executor(autoclean=True)
+    tasklist = runforrest.TaskList(autoclean=True)
     for v in range(howmany):
-        result = runforrest.defer(identity, v)
-        result = runforrest.defer(identity, result)
-        exe.schedule(result)
-    results = list(exe.run(nprocesses=10))
-    assert len(results) == howmany
-    for r, v in zip(sorted(results), range(howmany)):
+        task = runforrest.defer(identity, v)
+        task = runforrest.defer(identity, task)
+        tasklist.schedule(task)
+    tasks = list(tasklist.run(nprocesses=10))
+    assert len(tasks) == howmany
+    for r, v in zip(sorted(tasks), range(howmany)):
         assert r == v
 
 
-def test_result_accessor():
-    exe = runforrest.Executor(autoclean=True)
+def test_task_accessor():
+    tasklist = runforrest.TaskList(autoclean=True)
     # send something that has an attribute:
-    result = runforrest.defer(identity, Exception(42))
+    task = runforrest.defer(identity, Exception(42))
     # retrieve the attribute:
-    result = runforrest.defer(identity, result.args)
-    exe.schedule(result)
-    results = list(exe.run(nprocesses=1))
-    assert results[0] == (42,)
+    task = runforrest.defer(identity, task.args)
+    tasklist.schedule(task)
+    tasks = list(tasklist.run(nprocesses=1))
+    assert tasks[0] == (42,)
 
 
-def test_result_indexing():
-    exe = runforrest.Executor(autoclean=True)
-    # send something that can be indexed:
-    result = runforrest.defer(identity, [42])
+def test_task_indexing():
+    tasklist = runforrest.TaskList(autoclean=True)
+    # send something that can be indtasklistd:
+    task = runforrest.defer(identity, [42])
     # retrieve at index:
-    result = runforrest.defer(identity, result[0])
-    exe.schedule(result)
-    results = list(exe.run(nprocesses=1))
-    assert results[0] == 42
+    task = runforrest.defer(identity, task[0])
+    tasklist.schedule(task)
+    tasks = list(tasklist.run(nprocesses=1))
+    assert tasks[0] == 42
 
 
 def test_todo_and_done_task_access():
-    exe = runforrest.Executor(autoclean=True)
-    result = runforrest.defer(identity, 42)
-    exe.schedule(result)
-    todo = list(exe.todo_tasks())
-    list(exe.run(nprocesses=1))
-    done = list(exe.done_tasks())
-    assert result == done[0] == todo[0]
+    tasklist = runforrest.TaskList(autoclean=True)
+    task = runforrest.defer(identity, 42)
+    tasklist.schedule(task)
+    todo = list(tasklist.todo_tasks())
+    list(tasklist.run(nprocesses=1))
+    done = list(tasklist.done_tasks())
+    assert task == done[0] == todo[0]
 
 
 def crash():
@@ -83,46 +83,46 @@ def crash():
 
 
 def test_failing_task():
-    exe = runforrest.Executor(autoclean=True)
-    result = runforrest.defer(crash)
-    exe.schedule(result)
-    results = list(exe.run(nprocesses=1))
-    assert len(results) == 0
-    fail = list(exe.fail_tasks())
+    tasklist = runforrest.TaskList(autoclean=True)
+    task = runforrest.defer(crash)
+    tasklist.schedule(task)
+    tasks = list(tasklist.run(nprocesses=1))
+    assert len(tasks) == 0
+    fail = list(tasklist.fail_tasks())
     assert len(fail) == 1
-    assert fail[0] == result
+    assert fail[0] == task
     assert fail[0]._error.args == ('TESTING',)
 
 
 def test_invalid_task():
-    exe = runforrest.Executor(autoclean=True)
-    result = runforrest.defer(0) # not a function!
-    exe.schedule(result)
-    results = list(exe.run(nprocesses=1))
-    assert len(results) == 0
-    fail = list(exe.fail_tasks())
+    tasklist = runforrest.TaskList(autoclean=True)
+    task = runforrest.defer(0) # not a function!
+    tasklist.schedule(task)
+    tasks = list(tasklist.run(nprocesses=1))
+    assert len(tasks) == 0
+    fail = list(tasklist.fail_tasks())
     assert len(fail) == 1
-    assert fail[0] == result
+    assert fail[0] == task
     assert isinstance(fail[0]._error, TypeError)
 
 
 def test_autoclean_true():
-    exe = runforrest.Executor(autoclean=True)
-    result = runforrest.defer(crash)
-    exe.schedule(result)
-    list(exe.run(nprocesses=1))
-    del exe
+    tasklist = runforrest.TaskList(autoclean=True)
+    task = runforrest.defer(crash)
+    tasklist.schedule(task)
+    list(tasklist.run(nprocesses=1))
+    del tasklist
     assert not pathlib.Path('./rf_todo').exists()
     assert not pathlib.Path('./rf_done').exists()
     assert not pathlib.Path('./rf_fail').exists()
 
 
 def test_autoclean_false():
-    exe = runforrest.Executor(autoclean=False)
-    result = runforrest.defer(crash)
-    exe.schedule(result)
-    list(exe.run(nprocesses=1))
-    del exe
+    tasklist = runforrest.TaskList(autoclean=False)
+    task = runforrest.defer(crash)
+    tasklist.schedule(task)
+    list(tasklist.run(nprocesses=1))
+    del tasklist
     for path in ['./rf_todo', './rf_done', './rf_fail']:
         path = pathlib.Path(path)
         assert path.exists()

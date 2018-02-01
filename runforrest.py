@@ -10,22 +10,22 @@ import time
 def defer(fun, *args, **kwargs):
     """Wrap a function for execution.
 
-    Returns a `Result` without running the function. This `Result` can
+    Returns a `Task` without running the function. This `Task` can
     be used as an argument for other deferred functions to build a
     call graph. The call graph can then be executed by an `Executor`.
 
     Additionally, you can access attributes and indexes of the
-    `Result`.
+    `Task`.
 
     """
-    return Result(fun, args, kwargs)
+    return Task(fun, args, kwargs)
 
 
-class Result:
+class Task:
     """A proxy for a function result.
 
     Accessing attributes, indexing, and calling returns more
-    `Results`.
+    `Tasks`.
 
     """
 
@@ -41,22 +41,17 @@ class Result:
     def __getattr__(self, name):
         if name in ['__getstate__', '_id', '_kwargs', '_args', '_fun']:
             raise AttributeError()
-        return ResultAttribute(self, name)
+        return TaskAttribute(self, name)
 
     def __getitem__(self, key):
-        return ResultItem(self, key)
-
-    ## TODO: implement this:
-    # def __call__(self, *args, **kwargs):
-    #     raise Exception('I AM BEING CALLED')
-    #     return ResultCall(self, args, kwargs)
+        return TaskItem(self, key)
 
 
-class PartOfResult(Result):
-    """A proxy for a part of a Result.
+class PartOfTask(Task):
+    """A proxy for a part of a Task.
 
-    Results from accessing attributes, indexing, or calling a
-    `Result`. Each `PartOfResult` has an `_id` that is shared for all
+    Tasks from accessing attributes, indexing, or calling a
+    `Task`. Each `PartOfTask` has an `_id` that is shared for all
     equivalent attribute/index/call accesses.
 
     """
@@ -66,40 +61,32 @@ class PartOfResult(Result):
         self._id = parent._id + str(index)
 
 
-class ResultAttribute(PartOfResult):
+class TaskAttribute(PartOfTask):
     pass
 
 
-class ResultItem(PartOfResult):
+class TaskItem(PartOfTask):
     pass
 
 
-class ResultCall(PartOfResult):
-    def __init__(self, parent, args, kwargs):
-        self._parent = parent
-        self._args = args
-        self._kwargs = kwargs
-        self._id = parent._id + '_call_'
+class TaskList:
+    """Evaluate `Tasks` and calculate their true return values.
 
-
-class Executor:
-    """Evaluate `Results` and calculate their true return values.
-
-    An `Executor` schedules `Results`, and then executes them on
-    several processes in parallel. For each `Result`, it walks the
+    An `TaskList` schedules `Tasks`, and then executes them on
+    several processes in parallel. For each `Task`, it walks the
     call chain, and executes all the code necessary to calculate the
-    return values. The `Executor` takes great pride in not evaluating
-    `Results` more often than necessary, even if several
-    `PartOfResults` lead to the same original `Result`.
+    return values. The `TaskList` takes great pride in not evaluating
+    `Tasks` more often than necessary, even if several
+    `PartOfTasks` lead to the same original `Task`.
 
-    By default, `schedule` dumps each `Result` in the directory
-    `rf_todo`. Once the `Result` has been executed, it is transferred
+    By default, `schedule` dumps each `Task` in the directory
+    `rf_todo`. Once the `Task` has been executed, it is transferred
     to either `rf_done` or `rf_failed`, depending on whether it raised
     errors or not.
 
-    The `Executor` delegates all the actual running of code to
+    The `TaskList` delegates all the actual running of code to
     `evaluate`, which is called by invoking this very script as a
-    command line program. The `Executor` merely makes sure that a
+    command line program. The `TaskList` merely makes sure that a
     fixed number of processes are running at all times.
 
     """
@@ -120,12 +107,12 @@ class Executor:
         """Schedule a function or file for later execution.
 
         If `fun` is a function, supply arguments as arguments to
-        `schedule`. It will be treated as if `fun` was a `Result` that
+        `schedule`. It will be treated as if `fun` was a `Task` that
         already contained all arguments. This is merely for
         convenience.
 
-        If `fun` is a `Result`, it is saved to the TODO directory. Use
-        `run` to execute all the `Results` in the TODO directory.
+        If `fun` is a `Task`, it is saved to the TODO directory. Use
+        `run` to execute all the `Tasks` in the TODO directory.
 
         """
 
@@ -139,13 +126,13 @@ class Executor:
             dill.dump(fun, f)
 
     def run(self, nprocesses=4, flags=None, save_session=False):
-        """Execute all `Results` in TODO directory and yield values.
+        """Execute all `Tasks` in TODO directory and yield values.
 
-        All `Results` are executed in their own processes, and `run`
+        All `Tasks` are executed in their own processes, and `run`
         makes sure that no more than `nprocesses` are active at any
         time.
 
-        `Results` that raise errors are not yielded.
+        `Tasks` that raise errors are not yielded.
 
         `flags` can be one of `print` or `raise` if you want errors to
         be printed or raised.
@@ -163,7 +150,7 @@ class Executor:
         if save_session:
             dill.dump_session(self.session_file)
 
-        class ResultIterator:
+        class TaskIterator:
             def __init__(self, parent, todos, save_session):
                 self.parent = parent
                 self.todos = todos
@@ -179,7 +166,7 @@ class Executor:
             def __len__(self):
                 return len(self.todos)
 
-        return ResultIterator(self, list(self.todo_dir.iterdir()), save_session)
+        return TaskIterator(self, list(self.todo_dir.iterdir()), save_session)
 
     def _start_task(self, file, flags, save_session):
         args = ['python', '-m', 'runforrest', self.todo_dir / file, self.done_dir / file]
@@ -251,59 +238,6 @@ class Executor:
             self.session_file.unlink()
 
 
-class SSHExecutor(Executor):
-    """Evaluate `Results` and calculate their true return values.
-
-    Does the same thing as `Executor`, but instead of starting
-    processes on my own computer, runs them on a set of computers that
-    are accessible through SSH.
-
-    """
-
-    def run(self, remotes={'localhost': (sys.argv[0], 4)}, flags=None):
-        """Execute all `Results` in the TODO directory.
-
-        All `Results` are executed in their own processes, and `run`
-        distributes them to `remotes`. Each `remote` has an address,
-        an executable name, and the number of processes it can run
-        concurrently. `run` makes sure that no more than the given
-        number of processes per remote are active at any time.
-
-        `flags` can be one of `print` or `raise` if you want errors to
-        be printed or raised.
-
-        """
-
-        if not self.done_dir.exists():
-            self.done_dir.mkdir()
-
-        for remote in remotes:
-            self.processes[remote] = {}
-
-        for todo in tqdm(self.todo_dir.iterdir()):
-            address, done = self._wait(remotes)
-            self._finish_task(done)
-            self._start_task(todo, address, remotes[address][0], flags)
-
-    def _start_task(self, file, address, executable, flags):
-        args = ['ssh', address, executable, '-wait',
-                'runforrest.py', self.todo_dir / file, self.done_dir / file]
-        if flags == 'print':
-            args.append('-p')
-        if flags == 'raise':
-            args.append('-r')
-        self.processes[file] = Popen(args)
-
-    def _wait(self, remotes):
-        while True:
-            for remote in remotes:
-                while len(self.processes[remote]) >= remotes[remote][1]:
-                    for file, proc in self.processes.items():
-                        if proc.poll():
-                            return remote, file
-            time.sleep(0.1)
-
-
 def main():
     parser = ArgumentParser(description="Run an enqueued function")
     parser.add_argument('infile', help='contains the enqueued function')
@@ -356,34 +290,34 @@ def evaluate(result, known_results=None):
 
     `evaluate` walks the call chain to the `result`, and executes all
     the code necessary to calculate the return values. No `result` are
-    executed more than once, even if several `PartOfResults` lead to
-    the same original `Result`.
+    executed more than once, even if several `PartOfTasks` lead to
+    the same original `Task`.
 
     This is a recursive function that passes its state in
-    `known_results`, where return values of all executed `Results` are
+    `known_results`, where return values of all executed `Tasks` are
     stored.
 
     """
 
-    # because pickling breaks isinstance(result, Result)
-    if not 'Result' in result.__class__.__name__:
+    # because pickling breaks isinstance(result, Task)
+    if not 'Task' in result.__class__.__name__:
         return result
 
     if known_results is None:
         known_results = {}
 
     if result._id not in known_results:
-        if result.__class__.__name__ in ['ResultItem', 'ResultCall', 'ResultAttribute']:
+        if result.__class__.__name__ in ['TaskItem', 'TaskCall', 'TaskAttribute']:
             return_value = evaluate(result._parent, known_results)
-            if result.__class__.__name__ == 'ResultItem':
+            if result.__class__.__name__ == 'TaskItem':
                 known_results[result._id] = return_value[result._index]
-            elif result.__class__.__name__ == 'ResultCall':
+            elif result.__class__.__name__ == 'TaskCall':
                 known_results[result._id] = return_value()
-            elif result.__class__.__name__ == 'ResultAttribute':
+            elif result.__class__.__name__ == 'TaskAttribute':
                 known_results[result._id] = getattr(return_value, result._index)
             else:
-                raise TypeError(f'unknown Result {type(result)}')
-        else: # is Result
+                raise TypeError(f'unknown Task {type(result)}')
+        else: # is Task
             args = [evaluate(arg, known_results) for arg in result._args]
             kwargs = {k: evaluate(v, known_results) for k, v in result._kwargs.items()}
             return_value = result._fun(*args, **kwargs)
