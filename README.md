@@ -32,31 +32,31 @@ So why is RunForrest better?
 3. Simple. The above call graph will now look like this:
 
 ```python
-from runforrest import Executor, defer
-exe = Executor()
+from runforrest import TaskList, defer
+tasklist = TaskList()
 
 for item in long_list_of_stuff:
-    intermediate = defer(prepare, item)
-    result = defer(dostuff, intermediate[1], intermediate.thing)
-    exe.schedule(result)
+    task = defer(prepare, item)
+    task = defer(dostuff, task[1], task.thing)
+    exe.schedule(task)
     
-for result in exe.run(nprocesses=4):
-    # use result
+for task in tasklist.run(nprocesses=4):
+    result = task.returnvalue # or task.errorvalue
 ```
 
-Wrap your function calls in `defer`, `schedule` them on an `Executor`,
+Wrap your function calls in `defer`, `schedule` them to a `TaskList`,
 then `run`. That's all there is to it. Deferred functions return
 objects that can be indexed and getattr'd as much as you'd like and
 all of that will be resolved once they are `run` (a single return
 object will never execute more than one time).
 
 But the best thing is, each `schedule` will just create a file in a
-new directory `rf_todo`. Then `run` will execute those files, and put
-them in `rf_done` or `rf_fail` depending on whether there were errors
-or not.
+new directory `tasklist/todo`. Then `run` will execute those files,
+and put them in `tasklist/done` or `tasklist/fail` depending on
+whether there were errors or not.
 
 This solves so many problems. Maybe you want to try to re-run a failed
-item? Just copy them back over to `rf_todo`, and `run` again. Or
+item? Just copy them back over to `tasklist/todo`, and `run` again. Or
 `python runforrest.py --do_raise infile outfile` them manually, and
 observe the error first hand!
 
