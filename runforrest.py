@@ -129,7 +129,7 @@ class TaskList:
 
         fun.metadata = metadata
 
-        with open(self._directory / 'todo' / (str(uuid()) + '.pkl'), 'wb') as f:
+        with (self._directory / 'todo' / (str(uuid()) + '.pkl')).open('wb') as f:
             dill.dump(fun, f)
 
     def run(self, nprocesses=4, flags=None, save_session=False):
@@ -201,7 +201,7 @@ class TaskList:
         (self._directory / 'todo' / file).unlink()
 
         try:
-            with open(self._directory / 'done' / file, 'rb') as f:
+            with (self._directory / 'done' / file).open('rb') as f:
                 task = dill.load(f)
         except Exception as err:
             print(f'could not load result of task {file} because {err}.')
@@ -216,17 +216,17 @@ class TaskList:
 
     def todo_tasks(self):
         for todo in (self._directory / 'todo').iterdir():
-            with open(todo, 'rb') as f:
+            with todo.open('rb') as f:
                 yield dill.load(f)
 
     def done_tasks(self):
         for done in (self._directory / 'done').iterdir():
-            with open(done, 'rb') as f:
+            with done.open('rb') as f:
                 yield dill.load(f)
 
     def fail_tasks(self):
         for fail in (self._directory / 'fail').iterdir():
-            with open(fail, 'rb') as f:
+            with fail.open('rb') as f:
                 yield dill.load(f)
 
     def clean(self):
@@ -245,9 +245,9 @@ class TaskList:
 
 def main():
     parser = ArgumentParser(description="Run an enqueued function")
-    parser.add_argument('infile', help='contains the enqueued function')
-    parser.add_argument('outfile', help='contains the evaluation results')
-    parser.add_argument('-s', '--sessionfile', action='store', default=None)
+    parser.add_argument('infile', type=Path, help='contains the enqueued function')
+    parser.add_argument('outfile', type=Path, help='contains the evaluation results')
+    parser.add_argument('-s', '--sessionfile', type=Path, action='store', default=None)
     parser.add_argument('-p', '--do_print', action='store_true', default=False)
     parser.add_argument('-r', '--do_raise', action='store_true', default=False)
 
@@ -268,7 +268,7 @@ def run_task(infile, outfile, sessionfile, do_print, do_raise):
     if sessionfile:
         dill.load_session(Path(sessionfile))
 
-    with open(infile, 'rb') as f:
+    with infile.open('rb') as f:
         task = dill.load(f)
 
     try:
@@ -278,7 +278,7 @@ def run_task(infile, outfile, sessionfile, do_print, do_raise):
         task._error = err
         task._value = None
     finally:
-        with open(outfile, 'wb') as f:
+        with outfile.open('wb') as f:
             dill.dump(task, f)
 
     if task._error and do_raise:
