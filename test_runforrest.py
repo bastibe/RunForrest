@@ -59,7 +59,7 @@ def test_task_accessor():
 
 def test_task_indexing():
     tasklist = runforrest.TaskList(post_clean=True)
-    # send something that can be indtasklistd:
+    # send something that can be indexed:
     task = runforrest.defer(identity, [42])
     # retrieve at index:
     task = runforrest.defer(identity, task[0])
