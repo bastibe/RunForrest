@@ -78,6 +78,15 @@ def test_todo_and_done_task_access():
     assert task == done[0] == todo[0]
 
 
+def test_metadata():
+    tasklist = runforrest.TaskList(post_clean=True)
+    task = runforrest.defer(identity, 42)
+    tasklist.schedule(task, metadata='the truth')
+    list(tasklist.run(nprocesses=1))
+    done = list(tasklist.done_tasks())
+    assert done[0].metadata == 'the truth'
+
+
 def crash():
     raise Exception('TESTING')
 

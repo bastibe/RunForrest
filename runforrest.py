@@ -33,13 +33,14 @@ class Task:
         self._fun = fun
         self._args = args
         self._kwargs = kwargs
+        self.metadata = None
         self._id = str(id(self))
 
     def __eq__(self, other):
         return self._id == other._id and self._args == other._args and self._fun == other._fun
 
     def __getattr__(self, name):
-        if name in ['__getstate__', '_id', '_kwargs', '_args', '_fun']:
+        if name in ['__getstate__', '_id', '_kwargs', '_args', '_fun', 'metadata']:
             raise AttributeError()
         return TaskAttribute(self, name)
 
@@ -59,6 +60,7 @@ class PartOfTask(Task):
         self._parent = parent
         self._index = index
         self._id = parent._id + str(index)
+        self.metadata = None
 
 
 class TaskAttribute(PartOfTask):
@@ -114,21 +116,18 @@ class TaskList:
         if self._post_clean:
             self.clean()
 
-    def schedule(self, fun, *args, **kwargs):
+    def schedule(self, fun, metadata=None):
         """Schedule a function or file for later execution.
 
-        If `fun` is a function, supply arguments as arguments to
-        `schedule`. It will be treated as if `fun` was a `Task` that
-        already contained all arguments. This is merely for
-        convenience.
-
-        If `fun` is a `Task`, it is saved to the TODO directory. Use
-        `run` to execute all the `Tasks` in the TODO directory.
+        The Task `fun` is saved to the TODO directory. Use `run` to
+        execute all the `Tasks` in the TODO directory.
 
         """
 
         if callable(fun):
             fun = defer(fun, *args, **kwargs)
+
+        fun.metadata = metadata
 
         with open(self._directory / 'todo' / (str(uuid()) + '.pkl'), 'wb') as f:
             dill.dump(fun, f)
