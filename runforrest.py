@@ -33,14 +33,16 @@ class Task:
         self._fun = fun
         self._args = args
         self._kwargs = kwargs
-        self.metadata = None
         self._id = str(id(self))
+        self.metadata = None
+        self.returnvalue = None
+        self.errorvalue = None
 
     def __eq__(self, other):
         return self._id == other._id and self._args == other._args and self._fun == other._fun
 
     def __getattr__(self, name):
-        if name in ['__getstate__', '_id', '_kwargs', '_args', '_fun', 'metadata']:
+        if name in ['__getstate__', '_id']:
             raise AttributeError()
         return TaskAttribute(self, name)
 
@@ -48,7 +50,7 @@ class Task:
         return TaskItem(self, key)
 
 
-class PartOfTask(Task):
+class PartOfTask():
     """A proxy for a part of a Task.
 
     Tasks from accessing attributes, indexing, or calling a
@@ -56,11 +58,25 @@ class PartOfTask(Task):
     equivalent attribute/index/call accesses.
 
     """
+
     def __init__(self, parent, index):
         self._parent = parent
         self._index = index
         self._id = parent._id + str(index)
         self.metadata = None
+        self.returnvalue = None
+        self.errorvalue = None
+
+    def __eq__(self, other):
+        return self._id == other._id and self._parent == other._parent
+
+    def __getattr__(self, name):
+        if name in ['__getstate__', '_id']:
+            raise AttributeError()
+        return TaskAttribute(self, name)
+
+    def __getitem__(self, key):
+        return TaskItem(self, key)
 
 
 class TaskAttribute(PartOfTask):
@@ -132,7 +148,7 @@ class TaskList:
         with (self._directory / 'todo' / (str(uuid()) + '.pkl')).open('wb') as f:
             dill.dump(fun, f)
 
-    def run(self, nprocesses=4, flags=None, save_session=False):
+    def run(self, nprocesses=4, flags=None, save_session=False, skip_fail=True):
         """Execute all `Tasks` in TODO directory and yield values.
 
         All `Tasks` are executed in their own processes, and `run`
@@ -160,10 +176,15 @@ class TaskList:
 
             def __iter__(self):
                 for todo in self.todos:
-                    yield from self.parent._wait(nprocesses)
+                    yield from self.wait(nprocesses)
                     self.parent._start_task(todo.name, flags, save_session)
                 # wait for running jobs to finish:
-                yield from self.parent._wait(1)
+                yield from self.wait(1)
+
+            def wait(self, nprocesses):
+                for task in self.parent._wait(nprocesses):
+                    if not skip_fail or task.errorvalue is None:
+                        yield task
 
             def __len__(self):
                 return len(self.todos)
@@ -194,25 +215,22 @@ class TaskList:
         process = self._processes.pop(file)
 
         if not (self._directory / 'done' / file).exists():
-            (self._directory / 'todo' / file).rename(self._directory / 'fail' / file)
-            print(f'task {file} failed without error.')
-            return
+            with (self._directory / 'todo' / file).open('rb') as f:
+                task = dill.load(f)
+                task.returnvalue = None
+                task.errorvalue = RuntimeError('Task failed with unknown error.')
+            with (self._directory / 'done' / file).open('wb') as f:
+                dill.dump(task, f)
 
         (self._directory / 'todo' / file).unlink()
 
-        try:
-            with (self._directory / 'done' / file).open('rb') as f:
-                task = dill.load(f)
-        except Exception as err:
-            print(f'could not load result of task {file} because {err}.')
-            (self._directory / 'done' / file).rename(self._directory / 'fail' / file)
-            return
+        with (self._directory / 'done' / file).open('rb') as f:
+            task = dill.load(f)
 
-        if process.returncode == 0:
-            yield task._value
-        else:
-            print(f'task {file} failed with error {task._error}.')
+        if process.returncode != 0:
             (self._directory / 'done' / file).rename(self._directory / 'fail' / file)
+
+        yield task
 
     def todo_tasks(self):
         for todo in (self._directory / 'todo').iterdir():
@@ -272,22 +290,22 @@ def run_task(infile, outfile, sessionfile, do_print, do_raise):
         task = dill.load(f)
 
     try:
-        task._value = evaluate(task)
-        task._error = None
+        task.returnvalue = evaluate(task)
+        task.errorvalue = None
     except Exception as err:
-        task._error = err
-        task._value = None
+        task.errorvalue = err
+        task.returnvalue = None
     finally:
         with outfile.open('wb') as f:
             dill.dump(task, f)
 
-    if task._error and do_raise:
-        raise task._error
+    if task.errorvalue is not None and do_raise:
+        raise task.errorvalue
 
-    if task._error and do_print:
-        print(task._error)
+    if task.errorvalue is not None and do_print:
+        print(task.errorvalue)
 
-    sys.exit(0 if task._error is None else -1)
+    sys.exit(0 if task.errorvalue is None else -1)
 
 
 def evaluate(task, known_results=None):
@@ -313,18 +331,18 @@ def evaluate(task, known_results=None):
 
     if task._id not in known_results:
         if task.__class__.__name__ in ['TaskItem', 'TaskAttribute']:
-            return_value = evaluate(task._parent, known_results)
+            returnvalue = evaluate(task._parent, known_results)
             if task.__class__.__name__ == 'TaskItem':
-                known_results[task._id] = return_value[task._index]
+                known_results[task._id] = returnvalue[task._index]
             elif task.__class__.__name__ == 'TaskAttribute':
-                known_results[task._id] = getattr(return_value, task._index)
+                known_results[task._id] = getattr(returnvalue, task._index)
             else:
                 raise TypeError(f'unknown Task {type(task)}')
         else: # is Task
             args = [evaluate(arg, known_results) for arg in task._args]
             kwargs = {k: evaluate(v, known_results) for k, v in task._kwargs.items()}
-            return_value = task._fun(*args, **kwargs)
-            known_results[task._id] = return_value
+            returnvalue = task._fun(*args, **kwargs)
+            known_results[task._id] = returnvalue
 
     return known_results[task._id]
 

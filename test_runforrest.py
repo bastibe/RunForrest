@@ -11,7 +11,7 @@ def test_run():
     task = runforrest.defer(identity, 42)
     tasklist.schedule(task)
     tasks = list(tasklist.run(nprocesses=4))
-    assert tasks[0] == 42
+    assert tasks[0].returnvalue == 42
 
 
 def test_nested_run():
@@ -20,7 +20,7 @@ def test_nested_run():
     task = runforrest.defer(identity, task)
     tasklist.schedule(task)
     tasks = list(tasklist.run(nprocesses=4))
-    assert tasks[0] == 42
+    assert tasks[0].returnvalue == 42
 
 
 def test_multiple_runs(howmany=20):
@@ -30,7 +30,7 @@ def test_multiple_runs(howmany=20):
         tasklist.schedule(task)
     tasks = list(tasklist.run(nprocesses=10))
     assert len(tasks) == howmany
-    for r, v in zip(sorted(tasks), range(howmany)):
+    for r, v in zip(sorted(t.returnvalue for t in tasks), range(howmany)):
         assert r == v
 
 
@@ -42,7 +42,7 @@ def test_multiple_nested_runs(howmany=20):
         tasklist.schedule(task)
     tasks = list(tasklist.run(nprocesses=10))
     assert len(tasks) == howmany
-    for r, v in zip(sorted(tasks), range(howmany)):
+    for r, v in zip(sorted(t.returnvalue for t in tasks), range(howmany)):
         assert r == v
 
 
@@ -54,7 +54,7 @@ def test_task_accessor():
     task = runforrest.defer(identity, task.args)
     tasklist.schedule(task)
     tasks = list(tasklist.run(nprocesses=1))
-    assert tasks[0] == (42,)
+    assert tasks[0].returnvalue == (42,)
 
 
 def test_task_indexing():
@@ -65,7 +65,7 @@ def test_task_indexing():
     task = runforrest.defer(identity, task[0])
     tasklist.schedule(task)
     tasks = list(tasklist.run(nprocesses=1))
-    assert tasks[0] == 42
+    assert tasks[0].returnvalue == 42
 
 
 def test_todo_and_done_task_access():
@@ -100,7 +100,7 @@ def test_failing_task():
     fail = list(tasklist.fail_tasks())
     assert len(fail) == 1
     assert fail[0] == task
-    assert fail[0]._error.args == ('TESTING',)
+    assert fail[0].errorvalue.args == ('TESTING',)
 
 
 def test_invalid_task():
@@ -112,7 +112,7 @@ def test_invalid_task():
     fail = list(tasklist.fail_tasks())
     assert len(fail) == 1
     assert fail[0] == task
-    assert isinstance(fail[0]._error, TypeError)
+    assert isinstance(fail[0].errorvalue, TypeError)
 
 
 def test_post_clean_true():
