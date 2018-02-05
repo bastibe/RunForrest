@@ -208,18 +208,18 @@ class TaskList:
 
     def _retrieve_task(self, taskfilename):
         """Load task, and sort into `{directory}/done` or `{directory}/fail`."""
-        if not (self._directory / 'done' / taskfilename).exists():
+        try:
+            with (self._directory / 'done' / taskfilename).open('rb') as f:
+                task = dill.load(f)
+        except Exception as error:
             with (self._directory / 'todo' / taskfilename).open('rb') as f:
                 task = dill.load(f)
                 task.returnvalue = None
-                task.errorvalue = RuntimeError('Task failed with unknown error.')
+                task.errorvalue = error
             with (self._directory / 'done' / taskfilename).open('wb') as f:
                 dill.dump(task, f)
 
         (self._directory / 'todo' / taskfilename).unlink()
-
-        with (self._directory / 'done' / taskfilename).open('rb') as f:
-            task = dill.load(f)
 
         if task.errorvalue is not None:
             (self._directory / 'done' / taskfilename).rename(self._directory / 'fail' / taskfilename)
