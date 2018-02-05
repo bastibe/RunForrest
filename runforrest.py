@@ -304,6 +304,9 @@ def run_task(infile, outfile, sessionfile, do_print, do_raise):
     if task.errorvalue is not None and do_raise:
         raise task.errorvalue
 
+    if task.errorvalue is not None and do_print:
+        print(f'Error in {infile.name}: {task.errorvalue.__repr__()}')
+
     sys.exit(0 if task.errorvalue is None else -1)
 
 
