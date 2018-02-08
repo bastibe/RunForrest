@@ -202,6 +202,7 @@ class TaskList:
             for file, proc in list(self._processes.items()):
                 if proc.poll() is not None:
                     yield self._retrieve_task(file)
+                    self._processes[file].wait()
                     del self._processes[file]
             else:
                 time.sleep(0.1)
