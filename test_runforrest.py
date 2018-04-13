@@ -144,3 +144,19 @@ def test_post_clean_false():
         for file in path.iterdir():
             file.unlink()
         path.rmdir()
+
+def test_logging():
+    logfile = pathlib.Path('tmp.log')
+    if logfile.exists():
+        logfile.unlink()
+    tasklist = runforrest.TaskList('tmp', post_clean=True, logfile=logfile)
+    task = runforrest.defer(identity, 42)
+    tasklist.schedule(task)
+    tasks = list(tasklist.run(nprocesses=4))
+    with logfile.open() as f:
+        lines = list(f)
+        assert len(lines) == 3
+        assert 'schedule' in lines[0]
+        assert 'start' in lines[1]
+        assert 'done' in lines[2]
+    logfile.unlink()

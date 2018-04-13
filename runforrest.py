@@ -109,9 +109,10 @@ class TaskList:
 
     """
 
-    def __init__(self, directory, exist_ok=False, pre_clean=True, post_clean=False):
+    def __init__(self, directory, exist_ok=False, pre_clean=True, post_clean=False, logfile=None):
         self._directory = Path(directory)
         self._post_clean = post_clean
+        self._logfile = Path(logfile) if logfile else None
 
         if self._directory.exists():
             if not exist_ok:
@@ -145,8 +146,10 @@ class TaskList:
         if metadata is not None:
             task.metadata = metadata
 
-        with (self._directory / 'todo' / (str(uuid()) + '.pkl')).open('wb') as f:
+        taskfilename = (str(uuid()) + '.pkl')
+        with (self._directory / 'todo' / taskfilename).open('wb') as f:
             dill.dump(task, f)
+        self._log('schedule', taskfilename)
 
     def run(self, nprocesses=4, print_errors=False, save_session=False):
         """Execute all tasks in the `{directory}/todo}` directory.
@@ -195,13 +198,16 @@ class TaskList:
         if save_session:
             args += ['-s', self._directory / 'session.pkl']
         self._processes[taskfilename] = Popen(args, cwd=os.getcwd())
+        self._log('start', taskfilename)
 
     def _finish_tasks(self, nprocesses):
         """Wait while `nprocesses` are running and return finished tasks."""
         while len(self._processes) >= nprocesses:
             for file, proc in list(self._processes.items()):
                 if proc.poll() is not None:
-                    yield self._retrieve_task(file)
+                    task = self._retrieve_task(file)
+                    self._log('done' if task.errorvalue is None else 'fail', file)
+                    yield task
                     self._processes[file].wait()
                     del self._processes[file]
             else:
@@ -226,6 +232,12 @@ class TaskList:
             (self._directory / 'done' / taskfilename).rename(self._directory / 'fail' / taskfilename)
 
         return task
+
+    def _log(self, message, taskfilename):
+        if not self._logfile:
+            return
+        with self._logfile.open('a') as f:
+            f.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {taskfilename} {message}\n")
 
     def todo_tasks(self):
         """Yield all tasks in `{directory}/todo`."""
