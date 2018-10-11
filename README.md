@@ -25,11 +25,17 @@ Well, but IPyParallel has kind of a weird API, and Dask.distributed is
 hard to set up, and multiprocessing is kind of limited... I've been
 there, I've done that, and was not satisfied.
 
-So why is RunForrest better? 
+Furthermore, none of the above can handle seriously buggy programs
+that throw segfaults, corrupt your file system, leak memory, and
+exhaust your process limits. All of this has happened to me when I
+tried to run scientific code.
+
+So why is RunForrest better?
 
 1. Understandable. Just short of 200 lines of source code is manageable.
 2. No complicated dependencies. A recent version of Python with `dill` is all you need.
 3. Simple. The above call graph will now look like this:
+4. Robust. Runforrest survives errors, crashes, and even reboots, without losing data.
 
 ```python
 from runforrest import TaskList, defer
@@ -39,7 +45,7 @@ for item in long_list_of_stuff:
     task = defer(prepare, item)
     task = defer(dostuff, task[1], task.thing)
     tasklist.schedule(task)
-    
+
 for task in tasklist.run(nprocesses=4):
     result = task.returnvalue # or task.errorvalue
 ```
@@ -62,7 +68,7 @@ observe the error first hand!
 
 Yes, it's simple. Stupid simple even, you might say. But it is
 debuggable. It doesn't start a web server. It doesn't set up fancy
-kernels and messaging systems. It doesn't fork three ways and chokes
+kernels and messaging systems. It doesn't fork three ways and choke
 on its own memory consumption. It's just one simple script.
 
 Then again, maybe this won't run so well on more than a couple of
@@ -88,7 +94,7 @@ exists (`exist_ok=False`) and will keep all items after you are done
 If you are experimenting, and will create and re-create a `TaskList`
 over and over, set `exist_ok=True`. This will automatically delete any
 tasks in the directory when you instantiate your `TaskList`
-(`pre_clean=True`).
+(`pre_clean=True`):
 
 ```python
 >>> # new, empty, pre-existing list:
@@ -103,15 +109,33 @@ If you want to add to a pre-existing `TaskList`, set
 >>> tasklist = TaskList('existing_directory', exist_ok=True, pre_clean=False)
 ```
 
+If your computer crashed, and you want to continue where you last ran,
+set `noschedule_if_exist=True`. This way, all your `schedule`s will be
+skipped, and the existing `TaskList` will `run` all remaining TODO
+items:
+
+```python
+tasklist = TaskList('tasklist', noschedule_if_exist=True)
+
+for item in long_list_of_stuff:
+    task = defer(prepare, item)
+    task = defer(dostuff, task[1], task.thing)
+    tasklist.schedule(task) # will not schedule!
+
+for task in tasklist.run(nprocesses=4): # will run remaining TODOs
+    result = task.returnvalue # or task.errorvalue
+```
+
 ### Tasks
 
 Now you are ready to add tasks. A task is any deferred return value
-from a function or method call:
+from a function or method call, or plain data:
 
 ```python
 >>> task = defer(numpy.zeros, 5)
 >>> task = defer(dict, alpha='a', beta='b')
 >>> task = defer(lambda x: x, 42)
+>>> task = defer(42) # behaves like the previous line
 ```
 
 Tasks can also be used as arguments to deferred function calls:
@@ -139,20 +163,24 @@ indexed or attributed further:
 >>> task2 = defer(lambda x: x, task1['value'])
 >>> evaluate(task2)
 42
+>>> task1 = defer({'value': 42})
+>>> task2 = task1['value'] # also returns a Task!
+>>> evaluate(task2)
+42
 >>> task1 = defer(list, [23, 42])
->>> task2 = defer(lambda x: x, task1[1])
+>>> task2 = defer(lambda x: x, task1[1]) # or task2 = task1[1]
 >>> evaluate(task2)
 42
 >>> task1 = defer(Exception, 'an error message')
->>> task2 = defer(lambda x: x, task1.args)
+>>> task2 = defer(lambda x: x, task1.args) # or task2 = task1.args
 >>> evaluate(task2)
 ('an error message',)
->>> task2 = defer(lambda x: x, task1.args[0])
+>>> task2 = defer(lambda x: x, task1.args[0]) # or task2 = task1.args[0]
 'an error message'
 ```
 
 This way, you can build arbitrary, deep trees of functions and methods
-that process your data. 
+that process your data.
 
 ### Scheduling and Running
 
@@ -187,6 +215,10 @@ aforementioned metadata in `task.metadata`.
 If you want to get more feedback for failing tasks, you can run them
 with `print_errors=True`, which will print the full stack trace of
 every error the moment it occurs.
+
+Sometimes, `dill` won't catch some local functions or globals, and
+your tasks will fail. In that case, set `save_session=True` and try
+again.
 
 ### Accessing Tasks
 
