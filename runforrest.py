@@ -7,18 +7,30 @@ from argparse import ArgumentParser
 import dill
 import time
 
+def _identity(thing):
+    """Just a helper."""
+    return thing
+
 def defer(fun, *args, **kwargs):
-    """Wrap a function for execution.
+    """Wrap a function or data for execution.
 
     Returns a `Task` without running the function. This `Task` can
     be used as an argument for other deferred functions to build a
     call graph. The call graph can then be executed by an `Executor`.
 
+    `fun` can also be non-callable data, in which case the resulting
+    `Task` will evaluate to that data and function arguments are
+    ignored. This can be useful to defer later attribute accesses.
+
     Additionally, you can access attributes and indexes of the
     `Task`.
 
     """
-    return Task(fun, args, kwargs)
+    if not callable(fun) and not isinstance(fun, Task):
+        # return non-functions varbatim
+        return Task(_identity, [fun], {})
+    else:
+        return Task(fun, args, kwargs)
 
 
 class Task:

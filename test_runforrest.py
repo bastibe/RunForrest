@@ -1,7 +1,6 @@
 import runforrest
 import pathlib
 
-
 def identity(n):
     return n
 
@@ -9,6 +8,14 @@ def identity(n):
 def test_run():
     tasklist = runforrest.TaskList('tmp', post_clean=True)
     task = runforrest.defer(identity, 42)
+    tasklist.schedule(task)
+    tasks = list(tasklist.run(nprocesses=4))
+    assert tasks[0].returnvalue == 42
+
+
+def test_data_task():
+    tasklist = runforrest.TaskList('tmp', post_clean=True)
+    task = runforrest.defer(42)
     tasklist.schedule(task)
     tasks = list(tasklist.run(nprocesses=4))
     assert tasks[0].returnvalue == 42
@@ -102,20 +109,6 @@ def test_failing_task():
     assert len(fail) == 1
     assert fail[0] == task
     assert fail[0].errorvalue.args == ('TESTING',)
-    done = list(tasklist.done_tasks())
-    assert len(done) == 0
-
-
-def test_invalid_task():
-    tasklist = runforrest.TaskList('tmp', post_clean=True)
-    task = runforrest.defer(0) # not a function!
-    tasklist.schedule(task)
-    tasks = list(tasklist.run(nprocesses=1))
-    assert len(tasks) == 1
-    fail = list(tasklist.fail_tasks())
-    assert len(fail) == 1
-    assert fail[0] == task
-    assert isinstance(fail[0].errorvalue, TypeError)
     done = list(tasklist.done_tasks())
     assert len(done) == 0
 
