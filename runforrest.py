@@ -46,9 +46,6 @@ class Task:
         self._args = args
         self._kwargs = kwargs
         self._id = str(id(self))
-        self.metadata = None
-        self.returnvalue = None
-        self.errorvalue = None
 
     def __eq__(self, other):
         return self._id == other._id and self._args == other._args and self._fun == other._fun
@@ -75,9 +72,6 @@ class PartOfTask():
         self._parent = parent
         self._index = index
         self._id = parent._id + str(index)
-        self.metadata = None
-        self.returnvalue = None
-        self.errorvalue = None
 
     def __eq__(self, other):
         return self._id == other._id and self._parent == other._parent
@@ -155,8 +149,9 @@ class TaskList:
 
         """
 
-        if metadata is not None:
-            task.metadata = metadata
+        task.errorvalue = None
+        task.returnvalue = None
+        task.metadata = metadata
 
         taskfilename = (str(uuid()) + '.pkl')
         with (self._directory / 'todo' / taskfilename).open('wb') as f:
