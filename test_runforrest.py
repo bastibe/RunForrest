@@ -138,6 +138,20 @@ def test_post_clean_false():
             file.unlink()
         path.rmdir()
 
+
+def test_noschedule():
+    tasklist = runforrest.TaskList('tmp')
+    task = runforrest.defer(identity, 42)
+    tasklist.schedule(task)
+    # do not run, but reopen:
+    tasklist = runforrest.TaskList('tmp', noschedule_if_exist=True, post_clean=True)
+    task = runforrest.defer(identity, 42)
+    tasklist.schedule(task) # should now be a no-op
+    tasks = list(tasklist.run(nprocesses=4))
+    assert len(tasks) == 1
+    assert tasks[0].returnvalue == 42
+
+
 def test_logging():
     logfile = pathlib.Path('tmp.log')
     if logfile.exists():

@@ -115,13 +115,18 @@ class TaskList:
 
     """
 
-    def __init__(self, directory, exist_ok=False, pre_clean=True, post_clean=False, logfile=None):
+    def __init__(self, directory, exist_ok=False, pre_clean=True,
+                 post_clean=False, logfile=None, noschedule_if_exist=False):
         self._directory = Path(directory)
         self._post_clean = post_clean
         self._logfile = Path(logfile) if logfile else None
+        self._noschedule = False
 
         if self._directory.exists():
-            if not exist_ok:
+            if noschedule_if_exist:
+                self._noschedule = True
+                pre_clean = False
+            elif not exist_ok:
                 raise RuntimeError(f'TaskList directory {str(self._directory)} already exists')
             if pre_clean:
                 self.clean()
@@ -148,6 +153,9 @@ class TaskList:
         can retrieve as `task.metadata` after the task has been run.
 
         """
+
+        if self._noschedule:
+            return
 
         task.errorvalue = None
         task.returnvalue = None
