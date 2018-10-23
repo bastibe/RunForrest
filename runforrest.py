@@ -1,6 +1,6 @@
 from uuid import uuid4 as uuid
 from pathlib import Path
-from subprocess import Popen
+from subprocess import Popen, STDOUT, PIPE
 import sys
 import os
 import signal
@@ -213,7 +213,11 @@ class TaskList:
             args += ['-p']
         if save_session:
             args += ['-s', self._directory / 'session.pkl']
-        self._processes[taskfilename] = Popen(args, cwd=os.getcwd(), start_new_session=True)
+        kwargs = dict(start_new_session=True, cwd=os.getcwd())
+        if self._logfile:
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = STDOUT
+        self._processes[taskfilename] = Popen(args, **kwargs)
         self._processes[taskfilename].start_time = time.time()
         self._log('start', taskfilename)
 
@@ -223,8 +227,10 @@ class TaskList:
             for file, proc in list(self._processes.items()):
                 if proc.poll() is not None:
                     task = self._retrieve_task(file)
+                    stdout, _ = self._processes[file].communicate(timeout=10)
                     self._log('done' if task.errorvalue is None else 'fail', file)
-                    self._processes[file].wait()
+                    if stdout:
+                        self._log(stdout, file)
                     del self._processes[file]
                     yield task
                 if autokill and time.time() - proc.start_time > autokill:
