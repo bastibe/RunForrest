@@ -233,9 +233,13 @@ class TaskList:
                         self._log(stdout, file)
                     del self._processes[file]
                     yield task
-                if autokill and time.time() - proc.start_time > autokill:
-                    process_group = os.getpgid(proc.pid)
-                    os.killpg(process_group, signal.SIGINT)
+                elif autokill and time.time() - proc.start_time > autokill:
+                    try:
+                        process_group = os.getpgid(proc.pid)
+                        os.killpg(process_group, signal.SIGINT)
+                        self._log('autokilled', file)
+                    except Exception as err:
+                        self._log(err.message, file)
             else:
                 time.sleep(0.1)
 
