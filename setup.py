@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='runforrest',
-    version='0.3.0',
+    version='0.4.0',
     description='Batch and run your code in parallel. Simply.',
     author='Bastian Bechtold',
     author_email='basti@bastibe.de',

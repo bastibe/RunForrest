@@ -3,6 +3,7 @@ from pathlib import Path
 from subprocess import Popen
 import sys
 import os
+import signal
 from argparse import ArgumentParser
 import dill
 import time
@@ -166,7 +167,7 @@ class TaskList:
             dill.dump(task, f)
         self._log('schedule', taskfilename)
 
-    def run(self, nprocesses=4, print_errors=False, save_session=False):
+    def run(self, nprocesses=4, print_errors=False, save_session=False, autokill=None):
         """Execute all tasks in the `{directory}/todo}` directory.
 
         All tasks are executed in their own processes, and `run` makes
@@ -193,10 +194,10 @@ class TaskList:
 
             def __iter__(self):
                 for todo in self.todos:
-                    yield from self.parent._finish_tasks(nprocesses)
+                    yield from self.parent._finish_tasks(nprocesses, autokill=autokill)
                     self.parent._start_task(todo.name, print_errors, save_session)
                 # wait for running jobs to finish:
-                yield from self.parent._finish_tasks(1)
+                yield from self.parent._finish_tasks(1, autokill=autokill)
 
             def __len__(self):
                 return len(self.todos)
@@ -212,19 +213,23 @@ class TaskList:
             args += ['-p']
         if save_session:
             args += ['-s', self._directory / 'session.pkl']
-        self._processes[taskfilename] = Popen(args, cwd=os.getcwd())
+        self._processes[taskfilename] = Popen(args, cwd=os.getcwd(), start_new_session=True)
+        self._processes[taskfilename].start_time = time.time()
         self._log('start', taskfilename)
 
-    def _finish_tasks(self, nprocesses):
+    def _finish_tasks(self, nprocesses, autokill):
         """Wait while `nprocesses` are running and return finished tasks."""
         while len(self._processes) >= nprocesses:
             for file, proc in list(self._processes.items()):
                 if proc.poll() is not None:
                     task = self._retrieve_task(file)
                     self._log('done' if task.errorvalue is None else 'fail', file)
-                    yield task
                     self._processes[file].wait()
                     del self._processes[file]
+                    yield task
+                if autokill and time.time() - proc.start_time > autokill:
+                    process_group = os.getpgid(proc.pid)
+                    os.killpg(process_group, signal.SIGINT)
             else:
                 time.sleep(0.1)
 
