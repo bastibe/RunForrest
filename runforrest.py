@@ -235,8 +235,13 @@ class TaskList:
                     yield task
                 elif autokill and time.time() - proc.start_time > autokill:
                     try:
+                        # kill the whole process group.
+                        # This is a mean thing to do, and might leave dangling
+                        # intermedite files. But at this point, the program was
+                        # provably not able to terminate on its own, and drastic
+                        # measures are our last resort.
                         process_group = os.getpgid(proc.pid)
-                        os.killpg(process_group, signal.SIGINT)
+                        os.killpg(process_group, signal.SIGKILL)
                         self._log('autokilled', file)
                     except Exception as err:
                         self._log(err.message, file)
