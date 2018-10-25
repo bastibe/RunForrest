@@ -126,6 +126,11 @@ for task in tasklist.run(nprocesses=4): # will run remaining TODOs
     result = task.returnvalue # or task.errorvalue
 ```
 
+If your tasks are noisy, and litter your terminal with status messages,
+you can supply the `TaskList` with a `logfile`. If given, all output,
+and some diagnostic information, will be saved to the logfile instead of
+the terminal.
+
 ### Tasks
 
 Now you are ready to add tasks. A task is any deferred return value
@@ -219,6 +224,21 @@ every error the moment it occurs.
 Sometimes, `dill` won't catch some local functions or globals, and
 your tasks will fail. In that case, set `save_session=True` and try
 again.
+
+Sometimes, tasks are unreliable, and need to be stopped before they
+bring your computer to a halt. You can tell RunForrest to kill tasks if
+they take longer than a set amount of seconds, by adding the `autokill`
+argument:
+
+```python
+>>> for task in tasklist.run(autokill=300): # kill after five minutes
+>>>     ...
+```
+
+Note that `autokill` will `SIGKILL` the whole process group, and will
+not give the processes a chance to react or clean up after themselves.
+This is the only way to reliably kill stuck processes, and all their
+threads and child-processes they might have spawned. 
 
 ### Accessing Tasks
 
