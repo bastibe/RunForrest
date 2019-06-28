@@ -218,7 +218,7 @@ class TaskList:
             kwargs['stdout'] = PIPE
             kwargs['stderr'] = STDOUT
         self._processes[taskfilename] = Popen(args, **kwargs)
-        self._processes[taskfilename].start_time = time.time()
+        self._processes[taskfilename].start_time = time.perf_counter()
         self._log('start', taskfilename)
 
     def _finish_tasks(self, nprocesses, autokill):
@@ -233,7 +233,7 @@ class TaskList:
                         self._log(stdout, file)
                     del self._processes[file]
                     yield task
-                elif autokill and time.time() - proc.start_time > autokill:
+                elif autokill and time.perf_counter() - proc.start_time > autokill:
                     try:
                         # kill the whole process group.
                         # This is a mean thing to do, and might leave dangling
@@ -340,12 +340,14 @@ def run_task(infile, outfile, sessionfile, do_print, do_raise):
         task = dill.load(f)
 
     try:
+        start_time = time.perf_counter()
         task.returnvalue = evaluate(task)
         task.errorvalue = None
     except Exception as err:
         task.errorvalue = err
         task.returnvalue = None
     finally:
+        task.runtime = time.perf_counter() - start_time
         with outfile.open('wb') as f:
             dill.dump(task, f)
 

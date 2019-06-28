@@ -215,7 +215,8 @@ This will run each of your tasks in its own process, with ten
 processes active at any time. In its default, this will yield every
 finished task, with either the return value in `task.returnvalue`, or
 the error in `task.errorvalue` if there was an error, and the
-aforementioned metadata in `task.metadata`.
+aforementioned metadata in `task.metadata`. Additionally, the task
+run time is saved in `task.runtime`.
 
 If you want to get more feedback for failing tasks, you can run them
 with `print_errors=True`, which will print the full stack trace of
