@@ -243,6 +243,9 @@ class TaskList:
                         process_group = os.getpgid(proc.pid)
                         os.killpg(process_group, signal.SIGKILL)
                         self._log('autokilled', file)
+                        # sometimes, even the above does not work. In this case,
+                        # we will leak the process, but continue anyway:
+                        del self._processes[file]
                     except Exception as err:
                         self._log(err.message, file)
             else:
