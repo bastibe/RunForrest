@@ -227,12 +227,19 @@ class TaskList:
             for file, proc in list(self._processes.items()):
                 if proc.poll() is not None:
                     task = self._retrieve_task(file)
-                    stdout, _ = self._processes[file].communicate(timeout=10)
-                    self._log('done' if task.errorvalue is None else 'fail', file)
-                    if stdout:
-                        self._log(stdout, file)
-                    del self._processes[file]
-                    yield task
+                    try:
+                        stdout, _ = proc.communicate(timeout=10)
+                        self._log('done' if task.errorvalue is None else 'fail', file)
+                        if stdout:
+                            self._log(stdout, file)
+                        yield task
+                    except subprocess.TimeoutExpired as err:
+                        # something is wrong. Kill the process and move on.
+                        process_group = os.getpgid(proc.pid)
+                        os.killpg(process_group, signal.SIGKILL)
+                        self._log('lost contact', file)
+                    finally:
+                        del self._processes[file]
                 elif autokill and time.perf_counter() - proc.start_time > autokill:
                     try:
                         # kill the whole process group.
@@ -287,7 +294,10 @@ class TaskList:
         """Yield all tasks in `{directory}/done`."""
         for done in (self._directory / 'done').iterdir():
             with done.open('rb') as f:
-                yield dill.load(f)
+                try: # safeguard against broken tasks:
+                    yield dill.load(f)
+                except EOFError as err:
+                    print(f'skipping {done.name} ({err})')
 
     def fail_tasks(self):
         """Yield all tasks in `{directory}/fail`."""
